@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.cisco-vpn" path="/org/gnome/shell/extensions/cisco-vpn/">
+    <key name="gateway" type="s"><default>'safehome.charisma.ir:37891'</default><summary>Gateway</summary></key>
+    <key name="username" type="s"><default>''</default><summary>Username</summary></key>
+    <key name="cert-pin" type="s"><default>''</default><summary>Cert Pin</summary></key>
+  </schema>
+</schemalist>
