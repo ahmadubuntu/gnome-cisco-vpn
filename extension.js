@@ -1,4 +1,4 @@
-// extension.js — نسخه با persist وضعیت
+// extension.js — فیکس شده
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
@@ -17,6 +17,9 @@ const CiscoVPNIndicator = GObject.registerClass(
       this._vpnProcess = null;
       this._isConnected = false;
       this._monitorId = null;
+      
+      // PID file MUST be defined BEFORE _checkInitialState
+      this._pidFile = '/tmp/openconnect-cisco.pid';
       
       const extDir = extension.dir.get_path();
       this._iconDisconnected = Gio.File.new_for_path(extDir + '/icons/disconnected.svg');
@@ -53,23 +56,45 @@ const CiscoVPNIndicator = GObject.registerClass(
     }
 
     _checkInitialState() {
-      // Check if any VPN tunnel interface exists
-      const interfaces = this._getVpnInterfaces();
-      this._isConnected = interfaces.length > 0;
+      // Only check OUR specific process via PID file
+      const ourProcessRunning = this._isOurProcessRunning();
       
-      // If connected, try to find the process
-      if (this._isConnected) {
-        try {
-          GLib.spawn_command_line_sync('pgrep -f "openconnect.*safehome.charisma.ir"');
-          // Process exists, set state
-          this._vpnProcess = { pid: 1 }; // dummy to enable monitoring
-        } catch (e) {
-          // Process not found but interface exists (maybe from before reboot?)
-          this._vpnProcess = null;
+      if (ourProcessRunning) {
+        // Our process exists, check if interface is up
+        const interfaces = this._getVpnInterfaces();
+        this._isConnected = interfaces.length > 0;
+        if (this._isConnected) {
+          this._vpnProcess = { pid: 1 }; // dummy for monitoring
         }
+      } else {
+        // Not our process, always disconnected
+        this._isConnected = false;
+        this._vpnProcess = null;
+        // Clean up stale PID file if exists
+        this._cleanupPidFile();
       }
       
       this._updateIcon();
+    }
+
+    _isOurProcessRunning() {
+      try {
+        const pidFile = Gio.File.new_for_path(this._pidFile);
+        if (!pidFile.query_exists(null)) return false;
+        
+        const [, contents] = pidFile.load_contents(null);
+        const pid = parseInt(new TextDecoder().decode(contents).trim());
+        if (!pid || isNaN(pid)) return false;
+        
+        // Check if process with this PID exists and is openconnect
+        const [ok, out] = GLib.spawn_command_line_sync(`ps -p ${pid} -o comm=`);
+        if (!ok) return false;
+        
+        const comm = new TextDecoder().decode(out).trim();
+        return comm === 'openconnect';
+      } catch (e) {
+        return false;
+      }
     }
 
     _getVpnInterfaces() {
@@ -85,6 +110,15 @@ const CiscoVPNIndicator = GObject.registerClass(
       } catch (e) {
         return [];
       }
+    }
+
+    _cleanupPidFile() {
+      try {
+        const pidFile = Gio.File.new_for_path(this._pidFile);
+        if (pidFile.query_exists(null)) {
+          pidFile.delete(null);
+        }
+      } catch (e) {}
     }
 
     _updateIcon() {
@@ -125,9 +159,13 @@ const CiscoVPNIndicator = GObject.registerClass(
           if (certPin) this._settings.set_string('cert-pin', certPin);
         }
 
-        const cmd = ['pkexec', 'openconnect', '--user=' + username, '--useragent=AnyConnect',
+        // const cmd = ['pkexec', 'openconnect', '--user=' + username, '--useragent=AnyConnect',
+        //   '--protocol=anyconnect', '--passwd-on-stdin', '--disable-ipv6', '--no-dtls',
+        //   '--no-external-auth', '--background', '--pid-file=/tmp/openconnect-cisco.pid'];
+
+        const cmd = ['sudo', '-n', 'openconnect', '--user=' + username, '--useragent=AnyConnect',
           '--protocol=anyconnect', '--passwd-on-stdin', '--disable-ipv6', '--no-dtls',
-          '--no-external-auth', '--background', '--pid-file=/tmp/openconnect-cisco.pid'];
+          '--no-external-auth', '--background', '--pid-file=' + this._pidFile];
 
         if (certPin) cmd.splice(3, 0, '--servercert=' + certPin);
         cmd.push(gateway);
@@ -149,9 +187,8 @@ const CiscoVPNIndicator = GObject.registerClass(
 
     _disconnect() {
       try {
-        GLib.spawn_command_line_async('pkexec killall openconnect');
-        const pidFile = Gio.File.new_for_path('/tmp/openconnect-cisco.pid');
-        if (pidFile.query_exists(null)) pidFile.delete(null);
+        GLib.spawn_command_line_async('sudo -n killall openconnect');
+        this._cleanupPidFile();
       } catch (e) {}
       this._setDisconnected();
       Main.notify(_('Cisco VPN'), _('Disconnected'));
@@ -164,15 +201,23 @@ const CiscoVPNIndicator = GObject.registerClass(
     }
 
     _checkStatus() {
+      // Only check OUR specific process
+      const ourProcessRunning = this._isOurProcessRunning();
       const interfaces = this._getVpnInterfaces();
-      const wasConnected = this._isConnected;
-      this._isConnected = interfaces.length > 0;
       
-      // If state changed, update
-      if (wasConnected !== this._isConnected) {
-        if (!this._isConnected) {
+      const wasConnected = this._isConnected;
+      
+      if (ourProcessRunning && interfaces.length > 0) {
+        this._isConnected = true;
+      } else {
+        this._isConnected = false;
+        if (!ourProcessRunning) {
           this._vpnProcess = null;
+          this._cleanupPidFile();
         }
+      }
+      
+      if (wasConnected !== this._isConnected) {
         this._updateIcon();
       }
     }

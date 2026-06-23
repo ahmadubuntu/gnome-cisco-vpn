@@ -7,16 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.1.0] - 2026-06-23
+## [1.2.0] - 2026-06-23
 
 ### Added
 - Persistent connection state across GNOME Shell restarts
-- Auto-detection of VPN interface on extension load
-- `CHANGELOG.md` file
+- PID file tracking to detect only OUR openconnect process
+- `sudo -n` support with `sudoers` rule (no password prompts)
+- Charisma-style SVG icon (C letter with green/red states)
+- `_isOurProcessRunning()` to ignore other VPN connections
+- `_cleanupPidFile()` for stale PID cleanup
+
+### Changed
+- Replaced `pkexec` with `sudo -n` for connect/disconnect
+- Updated icon colors: green background + red C when connected
+- State detection now specific to extension's own process
 
 ### Fixed
-- Connection state now correctly shows after `Alt+F2` → `r` restart
-- State persists correctly after system reboot
+- Connection state correctly shows after `Alt+F2` → `r` restart
+- No longer falsely shows connected when other VPN is active
+- Disconnect properly cleans up PID file
+- `sudoers` path corrected to `/usr/sbin/openconnect`
+
+---
+
+## [1.1.0] - 2026-06-23
+
+### Added
+- CHANGELOG.md file
 
 ---
 
@@ -27,9 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cisco AnyConnect VPN connection via `openconnect`
 - TOTP/OTP auto-generation using `oathtool`
 - Secure credential storage in GNOME Keyring
-- SVG icon with Charisma-style "C" logo
-- Visual status indicator (green/red icon)
+- SVG icon with C logo
+- Visual status indicator (gray/red icon)
 - One-click connect/disconnect from system tray
 - Auto certificate pin fetching
 - Settings GUI with gateway, username, password, OTP secret
-- IPv6 disabled, DTLS disabled for compatibility with Cisco ASA
+- IPv6 disabled, DTLS disabled for Cisco ASA compatibility
