@@ -15,7 +15,8 @@ A GNOME Shell extension that connects to Cisco AnyConnect VPN with TOTP (Time-ba
 - 🖱️ **One-click connect/disconnect** — Click the **C** icon in the top panel
 - 🔐 **Auto certificate fetch** — Automatically fetches and stores the server certificate pin
 - 🌐 **IPv6 disabled by default** — Compatible with Cisco ASA servers that only support IPv4
-
+- 🔄 **Persistent state** — Connection status survives GNOME Shell restarts
+- 🎯 **Process isolation** — Only detects its own openconnect process, ignores other VPNs
 ---
 
 ## Security Considerations
@@ -43,6 +44,32 @@ A GNOME Shell extension that connects to Cisco AnyConnect VPN with TOTP (Time-ba
 ```bash
 sudo apt install oathtool openssl openconnect gir1.2-secret-1
 ```
+
+
+### Configure Sudoers (Required for passwordless connect/disconnect)
+The extension uses sudo -n to run openconnect and killall without password prompts.
+Find the correct path for openconnect:
+```bash
+which openconnect
+# Usually outputs: /usr/sbin/openconnect
+```
+
+Create the sudoers file:
+```bash
+sudo tee /etc/sudoers.d/cisco-vpn << 'EOF'
+YOUR_USERNAME ALL=(ALL) NOPASSWD: /usr/sbin/openconnect, /usr/bin/killall
+EOF
+```
+Set correct permissions (important!):
+```bash
+sudo chmod 440 /etc/sudoers.d/cisco-vpn
+```
+Verify it works:
+```bash
+sudo -n openconnect --help
+# Should show help without asking for password
+```
+
 
 ---
 
@@ -134,7 +161,7 @@ The extension monitors the VPN connection every 5 seconds and updates the panel 
 ### OpenConnect Command
 
 ```bash
-openconnect   --user=USERNAME   --useragent=AnyConnect   --protocol=anyconnect   --servercert=pin-sha256:...   --passwd-on-stdin   --disable-ipv6   --no-dtls   --no-external-auth   --background   safehome.charisma.ir:37891
+openconnect   --user=USERNAME   --useragent=AnyConnect   --protocol=anyconnect   --servercert=pin-sha256:...   --passwd-on-stdin   --disable-ipv6   --no-dtls   --no-external-auth   --background --pid-file=/tmp/openconnect-cisco.pid  safehome.charisma.ir:37891
 ```
 
 ### Why These Flags?
@@ -180,12 +207,17 @@ secret-tool store --label="Cisco VPN" service cisco-vpn account password
 
 ```text
 cisco-vpn@charisma.ir/
+├── CHANGELOG.md
 ├── extension.js
-├── prefs.js
+├── icons
+│   ├── connected.svg
+│   └── disconnected.svg
+├── LICENSE
 ├── metadata.json
-├── schemas/
-│   └── org.gnome.shell.extensions.cisco-vpn.gschema.xml
-└── README.md
+├── prefs.js
+├── README.md
+└── schemas
+    └── org.gnome.shell.extensions.cisco-vpn.gschema.xml
 ```
 
 ---
@@ -195,6 +227,7 @@ cisco-vpn@charisma.ir/
 ```bash
 gnome-extensions disable cisco-vpn@charisma.ir
 rm -rf ~/.local/share/gnome-shell/extensions/cisco-vpn@charisma.ir
+sudo rm -f /etc/sudoers.d/cisco-vpn
 ```
 
 ---

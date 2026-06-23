@@ -5,6 +5,6 @@
   "version": 2,
   "shell-version": ["45", "46"],
   "settings-schema": "org.gnome.shell.extensions.cisco-vpn",
-  "url": "https://github.com/ahmad/gnome-cisco-vpn",
+  "url": "https://github.com/ahmadubuntu/gnome-cisco-vpn",
   "gettext-domain": "cisco-vpn"
 }
