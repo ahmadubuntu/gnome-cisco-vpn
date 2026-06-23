@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!-- Background -->
+  <circle cx="12" cy="12" r="11" fill="#95a5a6"/>
+  <!-- C shape: arc from top-left to bottom-left, open on right -->
+  <!-- Using stroke instead of fill for clean C -->
+ <path d="M 12 3 A 9 9 0 1 0 21 12" fill="none" stroke="#e61919" stroke-width="5" stroke-linecap="butt"/>
+</svg>

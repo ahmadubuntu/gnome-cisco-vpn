@@ -1,3 +1,4 @@
+// extension.js — نسخه با persist وضعیت
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
@@ -17,18 +18,24 @@ const CiscoVPNIndicator = GObject.registerClass(
       this._isConnected = false;
       this._monitorId = null;
       
-      // Build UI first
+      const extDir = extension.dir.get_path();
+      this._iconDisconnected = Gio.File.new_for_path(extDir + '/icons/disconnected.svg');
+      this._iconConnected = Gio.File.new_for_path(extDir + '/icons/connected.svg');
+      
       this._buildUI();
-      // Then update icon
-      this._updateIcon();
-      // Then start monitoring
+      
+      // Check initial state from system
+      this._checkInitialState();
+      
       this._monitorConnection();
     }
 
     _buildUI() {
-      this._drawingArea = new St.DrawingArea({ width: 20, height: 20 });
-      this._drawingArea.connect('repaint', () => this._drawIcon());
-      this.add_child(this._drawingArea);
+      this._icon = new St.Icon({
+        style_class: 'system-status-icon',
+        icon_size: 22
+      });
+      this.add_child(this._icon);
 
       this._statusItem = new PopupMenu.PopupMenuItem(_('Status: Disconnected'), { reactive: false });
       this.menu.addMenuItem(this._statusItem);
@@ -45,47 +52,63 @@ const CiscoVPNIndicator = GObject.registerClass(
       this.menu.addMenuItem(settingsItem);
     }
 
-    _drawIcon() {
-      const cr = this._drawingArea.get_context();
-      const w = this._drawingArea.get_width();
-      const h = this._drawingArea.get_height();
-      const active = this._isConnected;
+    _checkInitialState() {
+      // Check if any VPN tunnel interface exists
+      const interfaces = this._getVpnInterfaces();
+      this._isConnected = interfaces.length > 0;
+      
+      // If connected, try to find the process
+      if (this._isConnected) {
+        try {
+          GLib.spawn_command_line_sync('pgrep -f "openconnect.*safehome.charisma.ir"');
+          // Process exists, set state
+          this._vpnProcess = { pid: 1 }; // dummy to enable monitoring
+        } catch (e) {
+          // Process not found but interface exists (maybe from before reboot?)
+          this._vpnProcess = null;
+        }
+      }
+      
+      this._updateIcon();
+    }
 
-      cr.arc(w / 2, h / 2, 9, 0, 2 * Math.PI);
-      cr.setSourceRGBA(active ? 0.9 : 0.58, active ? 0.3 : 0.63, active ? 0.24 : 0.65, 1);
-      cr.fill();
-
-      cr.setSourceRGBA(1, 1, 1, 1);
-      cr.selectFontFace('Sans', 0, 1);
-      cr.setFontSize(12);
-      const ext = cr.textExtents('C');
-      cr.moveTo((w - ext.width) / 2 - ext.x_bearing, (h + ext.height) / 2 - ext.y_bearing);
-      cr.showText('C');
+    _getVpnInterfaces() {
+      try {
+        const [ok, out] = GLib.spawn_command_line_sync("ip -o link show");
+        if (!ok) return [];
+        const text = new TextDecoder().decode(out);
+        // Look for tun, cscotun, vpn interfaces
+        const vpnIfs = text.split('\n').filter(line => 
+          /tun|csco|vpn/.test(line)
+        );
+        return vpnIfs;
+      } catch (e) {
+        return [];
+      }
     }
 
     _updateIcon() {
-      if (!this._drawingArea || !this._statusItem || !this._toggleItem) {
-        return;
-      }
-      this._drawingArea.queue_repaint();
+      if (!this._icon || !this._statusItem || !this._toggleItem) return;
+      
+      const file = this._isConnected ? this._iconConnected : this._iconDisconnected;
+      const iconFile = new Gio.FileIcon({ file });
+      this._icon.gicon = iconFile;
+      
       this._statusItem.label.text = _('Status: ') + (this._isConnected ? _('Connected') : _('Disconnected'));
       this._toggleItem.label.text = this._isConnected ? _('Disconnect') : _('Connect');
     }
 
     _toggleVPN() {
-      if (this._isConnected) {
-        this._disconnect();
-      } else {
-        this._connect();
-      }
+      if (this._isConnected) this._disconnect();
+      else this._connect();
     }
 
     async _connect() {
       try {
         const username = this._settings.get_string('username');
         const gateway = this._settings.get_string('gateway') || 'safehome.charisma.ir:37891';
-        const password = this._readSecret('password');
-        const otpSecret = this._readSecret('otp-secret');
+        const password = await this._readSecret('password');
+        const otpSecret = await this._readSecret('otp-secret');
 
         if (!username || !password || !otpSecret) {
           Main.notify(_('Cisco VPN'), _('Please configure settings first'));
@@ -141,23 +164,22 @@ const CiscoVPNIndicator = GObject.registerClass(
     }
 
     _checkStatus() {
-      try {
-        GLib.spawn_command_line_sync('ip link show tun0');
-        this._isConnected = true;
-      } catch (e) {
-        try {
-          const [ok, out] = GLib.spawn_command_line_sync("ip -o link show | grep -E 'tun|csco'");
-          this._isConnected = ok && out.length > 0;
-        } catch (e2) {
-          this._isConnected = false;
+      const interfaces = this._getVpnInterfaces();
+      const wasConnected = this._isConnected;
+      this._isConnected = interfaces.length > 0;
+      
+      // If state changed, update
+      if (wasConnected !== this._isConnected) {
+        if (!this._isConnected) {
+          this._vpnProcess = null;
         }
+        this._updateIcon();
       }
-      this._updateIcon();
     }
 
     _monitorConnection() {
       this._monitorId = GLib.timeout_add_seconds(0, 5, () => {
-        if (this._vpnProcess) this._checkStatus();
+        this._checkStatus();
         return GLib.SOURCE_CONTINUE;
       });
     }
@@ -166,12 +188,8 @@ const CiscoVPNIndicator = GObject.registerClass(
       return new Promise((resolve, reject) => {
         const proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE);
         proc.communicate_utf8_async(null, null, (p, res) => {
-          try {
-            const [, stdout] = proc.communicate_utf8_finish(res);
-            resolve(stdout.trim());
-          } catch (e) {
-            reject(e);
-          }
+          try { resolve(proc.communicate_utf8_finish(res)[1].trim()); }
+          catch (e) { reject(e); }
         });
       });
     }
@@ -181,17 +199,19 @@ const CiscoVPNIndicator = GObject.registerClass(
       try {
         const pin = await this._execAsync(['bash', '-c', script]);
         return 'pin-sha256:' + pin;
-      } catch (e) {
-        return null;
-      }
+      } catch (e) { return null; }
     }
 
-    _readSecret(key) {
-      const file = Gio.File.new_for_path(GLib.get_home_dir() + '/.config/cisco-vpn/' + key);
+    async _readSecret(account) {
       try {
-        const [, contents] = file.load_contents(null);
-        return new TextDecoder().decode(contents).trim();
+        const result = await this._execAsync([
+          'secret-tool', 'lookup',
+          'service', 'cisco-vpn',
+          'account', account
+        ]);
+        return result || null;
       } catch (e) {
+        logError(e, 'Failed to read secret for ' + account);
         return null;
       }
     }
@@ -209,7 +229,6 @@ export default class CiscoVPNExtension extends Extension {
     this._indicator = new CiscoVPNIndicator(this);
     Main.panel.addToStatusArea('cisco-vpn', this._indicator);
   }
-
   disable() {
     this._indicator.destroy();
     this._indicator = null;

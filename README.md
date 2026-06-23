@@ -20,12 +20,7 @@ A GNOME Shell extension that connects to Cisco AnyConnect VPN with TOTP (Time-ba
 
 ## Security Considerations
 
-- Passwords should be stored only in GNOME Keyring whenever possible.
-- The OTP Secret is highly sensitive and grants the ability to generate valid authentication codes.
-- If configuration is stored in `~/.config/cisco-vpn`, ensure filesystem permissions restrict access to the current user.
-- Avoid storing OTP secrets in plain text outside GNOME Keyring.
-- Never share exported configuration files containing credentials or OTP secrets.
-- Rotate the OTP Secret immediately if compromise is suspected.
+- Password is required for running openconnect with sudo
 
 ---
 
@@ -107,8 +102,6 @@ The OTP Secret is the Base32-encoded key used by your authenticator application 
 - Microsoft Authenticator
 - Authy
 - FreeOTP
-
-> ⚠️ Security Note: The OTP Secret is stored in GNOME Keyring and may also be stored under `~/.config/cisco-vpn/`. Protect this secret carefully.
 
 ---
 
@@ -202,7 +195,6 @@ cisco-vpn@charisma.ir/
 ```bash
 gnome-extensions disable cisco-vpn@charisma.ir
 rm -rf ~/.local/share/gnome-shell/extensions/cisco-vpn@charisma.ir
-rm -rf ~/.config/cisco-vpn
 ```
 
 ---

@@ -1,3 +1,4 @@
+// prefs.js — نسخه نهایی با verify
 import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio';
@@ -25,6 +26,14 @@ const CiscoVPNPrefs = GObject.registerClass(
 
     _buildUI() {
       this.append(this._makeTitle('<b>Cisco VPN Settings</b>'));
+      
+      const warn = new Gtk.Label({
+        use_markup: true,
+        label: '<span foreground="#e74c3c">⚠️ Secrets stored in GNOME Keyring only</span>',
+        margin_bottom: 10
+      });
+      this.append(warn);
+
       this._addTextEntry(_('Gateway:'), 'gateway', 'safehome.charisma.ir:37891');
       this._addTextEntry(_('Username:'), 'username', '');
       this._addSecretEntry(_('Password:'), 'password');
@@ -39,7 +48,7 @@ const CiscoVPNPrefs = GObject.registerClass(
       certBox.append(fetchBtn);
       this.append(certBox);
 
-      const saveBtn = new Gtk.Button({ label: _('Save'), margin_top: 20 });
+      const saveBtn = new Gtk.Button({ label: _('Save to Keyring'), margin_top: 20 });
       saveBtn.connect('clicked', () => this._save());
       this.append(saveBtn);
 
@@ -66,6 +75,7 @@ const CiscoVPNPrefs = GObject.registerClass(
       const box = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 10 });
       box.append(new Gtk.Label({ label, width_chars: 15, xalign: 0 }));
       const entry = new Gtk.Entry({ hexpand: true, visibility: false, input_purpose: Gtk.InputPurpose.PASSWORD });
+      
       Secret.password_lookup(VPN_SCHEMA, { 'service': 'cisco-vpn', 'account': key }, null,
         (obj, res) => {
           try {
@@ -73,6 +83,7 @@ const CiscoVPNPrefs = GObject.registerClass(
             if (p) entry.set_text(p);
           } catch (e) {}
         });
+      
       entry._key = key;
       box.append(entry);
       this.append(box);
@@ -88,12 +99,8 @@ const CiscoVPNPrefs = GObject.registerClass(
           Gio.SubprocessFlags.STDOUT_PIPE);
         const pin = await new Promise((resolve, reject) => {
           proc.communicate_utf8_async(null, null, (p, res) => {
-            try {
-              const [, out] = proc.communicate_utf8_finish(res);
-              resolve(out.trim());
-            } catch (e) {
-              reject(e);
-            }
+            try { resolve(proc.communicate_utf8_finish(res)[1].trim()); }
+            catch (e) { reject(e); }
           });
         });
         const fullPin = 'pin-sha256:' + pin;
@@ -106,27 +113,61 @@ const CiscoVPNPrefs = GObject.registerClass(
     }
 
     _save() {
-      const configDir = GLib.get_home_dir() + '/.config/cisco-vpn';
-      GLib.mkdir_with_parents(configDir, 0o700);
-
+      let saved = 0;
+      const total = this._secretEntries.length;
+      
       for (const entry of this._secretEntries) {
         const val = entry.get_text();
-        if (val) {
-          Secret.password_store(VPN_SCHEMA, { 'service': 'cisco-vpn', 'account': entry._key },
-            Secret.COLLECTION_DEFAULT, 'Cisco VPN ' + entry._key, val, null,
+        const key = entry._key;
+        
+        if (val && key) {
+          Secret.password_store(VPN_SCHEMA, { 'service': 'cisco-vpn', 'account': key },
+            Secret.COLLECTION_DEFAULT, 'Cisco VPN ' + key, val, null,
             (obj, res) => {
               try {
                 Secret.password_store_finish(res);
-              } catch (e) {}
+                saved++;
+                if (saved === total) this._verifySave();
+              } catch (e) {
+                logError(e);
+                this._status.set_text(_('Error saving ') + key);
+              }
             });
-
-          const file = Gio.File.new_for_path(configDir + '/' + entry._key);
-          const bytes = new TextEncoder().encode(val);
-          file.replace_contents(bytes, null, false, Gio.FileCreateFlags.NONE, null);
+        } else {
+          saved++;
+          if (saved === total) this._verifySave();
         }
       }
+      
       this._settings.set_string('cert-pin', this._certEntry.get_text());
-      this._status.set_text(_('Saved!'));
+    }
+
+    _verifySave() {
+      // Quick verify via secret-tool
+      GLib.timeout_add_seconds(0, 1, () => {
+        this._execAsync(['secret-tool', 'lookup', 'service', 'cisco-vpn', 'account', 'password']).then(pass => {
+          if (pass) {
+            this._status.set_text(_('✅ Saved and verified in Keyring!'));
+          } else {
+            this._status.set_text(_('⚠️ Saved but verify failed — unlock keyring?'));
+          }
+        });
+        return GLib.SOURCE_REMOVE;
+      });
+    }
+
+    _execAsync(argv) {
+      return new Promise((resolve) => {
+        try {
+          const proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE);
+          proc.communicate_utf8_async(null, null, (p, res) => {
+            try {
+              const [, stdout] = proc.communicate_utf8_finish(res);
+              resolve(stdout ? stdout.trim() : null);
+            } catch (e) { resolve(null); }
+          });
+        } catch (e) { resolve(null); }
+      });
     }
   }
 );
