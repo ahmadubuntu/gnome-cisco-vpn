@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] - 2026-06-30
+
+### Added
+- Modular architecture with dedicated managers for VPN, networking, secrets, OTP, notifications, logging, and state management.
+- Centralized `CommandRunner` for all command execution with error handling and timeout support.
+- Connection state machine with internal event bus for reliable state transitions.
+- Continuous VPN monitoring with automatic connection-loss detection.
+- Desktop notifications for connect, disconnect, and unexpected connection loss events.
+- VPN session tracking (connection time, VPN IP, and session metadata).
+- Improved process and PID lifecycle management.
+- Comprehensive dependency validation and runtime error handling.
+
+### Changed
+- Refactored codebase to reduce coupling between UI and backend components.
+- Improved overall maintainability and extensibility for future features.
+
+### Deprecated
+- Nothing.
+
+### Removed
+- Nothing.
+
+### Fixed
+- Various edge cases in connection state handling and process cleanup.
+
+### Security
+- Nothing.
+
+---
+
+
+
 ## [1.2.0] - 2026-06-23
 
 ### Added

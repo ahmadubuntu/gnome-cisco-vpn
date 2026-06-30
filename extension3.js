@@ -69,7 +69,7 @@ const CiscoVPNIndicator = GObject.registerClass(
             }
         }
 
-        _updateUI(force = false) {
+        _updateUI() {
             const isConnected = this._vpn.state?.isConnected() || false;
             const ip = this._vpn.session?.ip || '-';
 
@@ -99,12 +99,14 @@ const CiscoVPNIndicator = GObject.registerClass(
             const stateSaysConnected = this._vpn.state?.isConnected() || false;
 
             if (actuallyConnected && !stateSaysConnected) {
+                // واقعی وصل شده
                 this._vpn.state.connected();
                 this._vpn.network.getVpnIp().then(ip => {
                     if (ip) this._vpn.session.setIp(ip);
                 });
             } 
             else if (!actuallyConnected && stateSaysConnected) {
+                // از بیرون قطع شده
                 this._vpn.logger?.info("Connection lost from outside");
                 this._vpn.state.disconnected();
                 this._vpn.session.stop();
