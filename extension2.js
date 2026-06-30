@@ -25,7 +25,10 @@ const CiscoVPNIndicator = GObject.registerClass(
         }
 
         _buildUI() {
-            this._icon = new St.Icon({ style_class: 'system-status-icon', icon_size: 22 });
+            this._icon = new St.Icon({
+                style_class: 'system-status-icon',
+                icon_size: 22
+            });
             this.add_child(this._icon);
 
             this._statusItem = new PopupMenu.PopupMenuItem('Status: Disconnected', { reactive: false });
@@ -58,6 +61,7 @@ const CiscoVPNIndicator = GObject.registerClass(
         _copyIP() {
             if (this._vpn.session?.ip) {
                 St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, this._vpn.session.ip);
+                this._vpn.notifier?.notify('VPN IP copied to clipboard');
             }
         }
 
@@ -69,14 +73,17 @@ const CiscoVPNIndicator = GObject.registerClass(
             }
         }
 
-        _updateUI(force = false) {
+        _updateUI() {
             const isConnected = this._vpn.state?.isConnected() || false;
             const ip = this._vpn.session?.ip || '-';
 
+            // Update icon
             const extDir = this._extension.dir.get_path();
             const iconName = isConnected ? Icons.CONNECTED : Icons.DISCONNECTED;
-            this._icon.gicon = new Gio.FileIcon({ file: Gio.File.new_for_path(`${extDir}/icons/${iconName}`) });
+            const file = Gio.File.new_for_path(`${extDir}/icons/${iconName}`);
+            this._icon.gicon = new Gio.FileIcon({ file });
 
+            // Update menu items
             this._statusItem.label.text = `Status: ${isConnected ? 'Connected' : 'Disconnected'}`;
             this._toggleItem.label.text = isConnected ? 'Disconnect' : 'Connect';
             this._durationItem.label.text = `Duration: ${this._vpn.session?.getDuration() || '00:00:00'}`;
@@ -84,6 +91,13 @@ const CiscoVPNIndicator = GObject.registerClass(
         }
 
         _checkInitialState() {
+            if (this._vpn.network?.connected()) {
+                this._vpn.state?.connected();
+                // Try to get IP
+                this._vpn.network.getVpnIp().then(ip => {
+                    if (ip) this._vpn.session.setIp(ip);
+                });
+            }
             this._updateUI();
         }
 
@@ -95,20 +109,18 @@ const CiscoVPNIndicator = GObject.registerClass(
         }
 
         _updateStatus() {
-            const actuallyConnected = this._vpn.network?.connected() || false;
-            const stateSaysConnected = this._vpn.state?.isConnected() || false;
+            const currentlyConnected = this._vpn.network?.connected() || false;
+            const stateConnected = this._vpn.state?.isConnected() || false;
 
-            if (actuallyConnected && !stateSaysConnected) {
-                this._vpn.state.connected();
-                this._vpn.network.getVpnIp().then(ip => {
-                    if (ip) this._vpn.session.setIp(ip);
-                });
-            } 
-            else if (!actuallyConnected && stateSaysConnected) {
-                this._vpn.logger?.info("Connection lost from outside");
-                this._vpn.state.disconnected();
-                this._vpn.session.stop();
-                this._vpn.notifier.connectionLost();
+            if (currentlyConnected !== stateConnected) {
+                if (currentlyConnected) {
+                    this._vpn.state.connected();
+                    this._vpn.network.getVpnIp().then(ip => {
+                        if (ip) this._vpn.session.setIp(ip);
+                    });
+                } else {
+                    this._vpn.state.disconnected();
+                }
             }
 
             this._updateUI();
@@ -128,6 +140,9 @@ export default class CiscoVPNExtension extends Extension {
     }
 
     disable() {
-        if (this._indicator) this._indicator.destroy();
+        if (this._indicator) {
+            this._indicator.destroy();
+            this._indicator = null;
+        }
     }
 }
