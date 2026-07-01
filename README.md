@@ -35,47 +35,43 @@ A GNOME Shell extension that connects to Cisco AnyConnect VPN with TOTP (Time-ba
 
 ## Requirements
 
-- GNOME Shell 45 or 46 (Ubuntu 24.04+)
+- GNOME Shell 45 or newer
 - `oathtool` — for TOTP generation
 - `openssl` — for certificate pin fetching
 - `openconnect` — for VPN connection
-- `gir1.2-secret-1` — for GNOME Keyring access
+- `libsecret`/`gir1.2-secret-1` — for GNOME Keyring access
+
+On Debian/Ubuntu, the installer will handle the dependencies automatically. You can also install them manually:
 
 ```bash
 sudo apt install oathtool openssl openconnect gir1.2-secret-1
 ```
 
-
-### Configure Sudoers (Required for passwordless connect/disconnect)
-The extension uses sudo -n to run openconnect and killall without password prompts.
-Find the correct path for openconnect:
-```bash
-which openconnect
-# Usually outputs: /usr/sbin/openconnect
-```
-
-Create the sudoers file:
-```bash
-sudo tee /etc/sudoers.d/cisco-vpn << 'EOF'
-YOUR_USERNAME ALL=(ALL) NOPASSWD: /usr/sbin/openconnect, /usr/bin/killall
-EOF
-```
-Set correct permissions (important!):
-```bash
-sudo chmod 440 /etc/sudoers.d/cisco-vpn
-```
-Verify it works:
-```bash
-sudo -n openconnect --help
-# Should show help without asking for password
-```
-
+The installer also configures passwordless sudo access for `openconnect` and `killall` so that connecting and disconnecting work without prompting for a password.
 
 ---
 
 ## Installation
 
-### From Source
+### Automatic install (recommended)
+
+From the project directory, run:
+
+```bash
+bash INSTALL.sh
+```
+
+The script will:
+
+- install required packages
+- create the sudoers rule for passwordless VPN operations
+- copy the extension to the GNOME extensions directory
+- compile the GSettings schemas
+- enable the extension if possible
+
+### Manual install
+
+If you prefer to install it manually:
 
 ```bash
 # Clone the repository
@@ -177,25 +173,47 @@ openconnect   --user=USERNAME   --useragent=AnyConnect   --protocol=anyconnect  
 
 ## Troubleshooting
 
-### Extension Shows an Error
+### Extension shows an error
 
 ```bash
 journalctl -f -o cat /usr/bin/gnome-shell | grep -i cisco
 ```
 
-### Unable to Connect
+### Unable to connect
+
+Check whether the required commands are available:
+
+```bash
+which openconnect oathtool secret-tool openssl
+```
+
+Then test the connection manually:
 
 ```bash
 echo -n "YOUR_PASSWORD$(oathtool --totp -b YOUR_OTP_SECRET)" | sudo openconnect --user=YOUR_USER --useragent=AnyConnect --protocol=anyconnect --passwd-on-stdin --disable-ipv6 --no-dtls --no-external-auth safehome.charisma.ir:37891
 ```
 
-### Verify Certificate Pin
+### Sudo rule is not working
+
+Verify that the rule was created correctly:
+
+```bash
+sudo -n openconnect --help
+```
+
+If needed, you can re-run the installer:
+
+```bash
+bash INSTALL.sh
+```
+
+### Verify certificate pin
 
 ```bash
 echo | openssl s_client -connect safehome.charisma.ir:37891 2>/dev/null | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
 ```
 
-### Settings Are Not Saving
+### Settings are not saving
 
 ```bash
 secret-tool store --label="Cisco VPN" service cisco-vpn account password

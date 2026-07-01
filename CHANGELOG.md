@@ -37,7 +37,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.1] - 2026-07-01
 
+### Added
+- Fully automated installer script with dependency detection and package installation.
+- Dry-run mode for safe verification of the installation flow.
+- Improved installation guidance in the README for both automatic and manual setup.
+
+### Changed
+- Reworked the installer to auto-configure sudoers, copy the extension, compile schemas, and enable the extension when possible.
+- Updated the README to better reflect the new automated installation workflow and troubleshooting steps.
+
+### Fixed
+- Improved installation reliability by avoiding manual steps and reducing setup friction.
+- Clarified troubleshooting instructions for sudo access, missing dependencies, and extension enablement.
+
+---
 
 ## [1.2.0] - 2026-06-23
 
