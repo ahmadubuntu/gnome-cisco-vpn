@@ -4,17 +4,20 @@ export default class VPNSession {
         this.reset();
     }
 
-    start(gateway = '', ip = '') {
+    start(gateway = '', ip = '', iface = '') {
         this.connectedAt = new Date();
         this.disconnectedAt = null;
         this.gateway = gateway;
         this.ip = ip;
+        this.interface = iface;
         this.lastError = null;
         this.reconnectCount = 0;
     }
 
     stop() {
         this.disconnectedAt = new Date();
+        this.ip = '';
+        this.interface = '';
     }
 
     reset() {
@@ -22,6 +25,7 @@ export default class VPNSession {
         this.disconnectedAt = null;
         this.gateway = '';
         this.ip = '';
+        this.interface = '';
         this.lastError = null;
         this.reconnectCount = 0;
         this.bytesIn = 0;
@@ -30,6 +34,10 @@ export default class VPNSession {
 
     setIp(ip) {
         this.ip = ip;
+    }
+
+    setInterface(iface) {
+        this.interface = iface;
     }
 
     setGateway(gateway) {

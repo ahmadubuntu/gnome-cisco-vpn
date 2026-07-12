@@ -56,7 +56,7 @@ const CiscoVPNIndicator = GObject.registerClass(
         }
 
         _copyIP() {
-            if (this._vpn.session?.ip) {
+            if (this._vpn.state?.isConnected() && this._vpn.session?.ip) {
                 St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, this._vpn.session.ip);
             }
         }
@@ -71,7 +71,7 @@ const CiscoVPNIndicator = GObject.registerClass(
 
         _updateUI(force = false) {
             const isConnected = this._vpn.state?.isConnected() || false;
-            const ip = this._vpn.session?.ip || '-';
+            const ip = isConnected ? (this._vpn.session?.ip || '-') : '-';
 
             const extDir = this._extension.dir.get_path();
             const iconName = isConnected ? Icons.CONNECTED : Icons.DISCONNECTED;
@@ -101,7 +101,8 @@ const CiscoVPNIndicator = GObject.registerClass(
             if (actuallyConnected && !stateSaysConnected) {
                 this._vpn.state.connected();
                 this._vpn.network.getVpnIp().then(ip => {
-                    if (ip) this._vpn.session.setIp(ip);
+                    if (!ip || !this._vpn.state?.isConnected() || !this._vpn.network?.connected()) return;
+                    this._vpn.session.setIp(ip);
                 });
             } 
             else if (!actuallyConnected && stateSaysConnected) {

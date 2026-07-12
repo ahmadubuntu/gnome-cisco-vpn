@@ -6,6 +6,12 @@ export default class Network {
     constructor(runner) {
         this.runner = runner;
         this._pidFile = Paths.PID_FILE;
+        this._ifaceFile = Paths.INTERFACE_FILE;
+        this._interfaceName = Paths.INTERFACE_NAME;
+    }
+
+    interfaceName() {
+        return this._interfaceName;
     }
 
     pidFile() {
@@ -36,19 +42,10 @@ export default class Network {
         return r.success && r.stdout.trim() === 'openconnect';
     }
 
-    getInterfaces() {
-        const r = execSync(['ip', '-o', 'link', 'show']);
-        if (!r.success) return [];
-        return r.stdout.split('\n')
-            .map(line => {
-                const match = line.match(/^\d+:\s*(\S+):/);
-                return match ? match[1] : null;
-            })
-            .filter(name => name && (name.startsWith('tun') || name.startsWith('vpn') || name.startsWith('csco')));
-    }
-
     hasTunnel() {
-        return this.getInterfaces().length > 0;
+        if (!this.processExists()) return false;
+        const r = execSync(['ip', '-o', 'link', 'show', 'dev', this._interfaceName]);
+        return r.success && r.stdout.trim().length > 0;
     }
 
     connected() {
@@ -56,30 +53,22 @@ export default class Network {
     }
 
     async getVpnIp() {
+        if (!this.processExists()) return null;
         try {
-            const r = execSync(['ip', '-j', 'addr']);
+            const r = execSync(['ip', '-j', 'addr', 'show', 'dev', this._interfaceName]);
             if (!r.success) return null;
             const data = JSON.parse(r.stdout);
-            for (const iface of data) {
-                if (iface.ifname && (iface.ifname.startsWith('tun') || iface.ifname.startsWith('vpn') || iface.ifname.startsWith('csco'))) {
-                    for (const addr of iface.addr_info || []) {
-                        if (addr.family === 'inet') return addr.local;
-                    }
-                }
+            for (const addr of data[0]?.addr_info || []) {
+                if (addr.family === 'inet') return addr.local;
             }
         } catch (e) {}
         return null;
     }
 
     async cleanupTunnel() {
-        const ifaces = this.getInterfaces();
-        for (const iface of ifaces) {
-            try {
-                await this.runner.sudo(["ip", "link", "delete", iface]);
-            } catch (e) {}
-        }
-        // Extra cleanup
-        await this.runner.sudo(["ip", "link", "delete", "tun0"]).catch(() => {});
-        await this.runner.sudo(["ip", "link", "delete", "vpn0"]).catch(() => {});
+        if (!this.hasTunnel()) return;
+        try {
+            await this.runner.sudo(["ip", "link", "delete", this._interfaceName]);
+        } catch (e) {}
     }
 }

@@ -18,6 +18,8 @@ export const NotificationType = Object.freeze({
 
 export const Paths = Object.freeze({
     PID_FILE: '/tmp/openconnect-cisco.pid',
+    INTERFACE_FILE: '/tmp/openconnect-cisco.iface',
+    INTERFACE_NAME: 'cscovpn0',
 });
 
 export const Monitor = Object.freeze({

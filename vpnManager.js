@@ -56,7 +56,7 @@ export default class VPNManager {
             await new Promise(r => GLib.timeout_add(GLib.PRIORITY_DEFAULT, 2000, r));
 
             const ip = await this.network.getVpnIp();
-            this.session.start(gateway, ip);
+            this.session.start(gateway, ip, this.network.interfaceName());
             this.state.connected();
             this.notifier.connected();
 
@@ -65,6 +65,7 @@ export default class VPNManager {
 
         } catch (e) {
             this.logger.error(e);
+            this.session.stop();
             this.state.disconnected();
             this.notifier.error(e.message);
         }
@@ -103,7 +104,8 @@ export default class VPNManager {
             "--disable-ipv6",
             "--no-dtls",
             "--background",
-            `--pid-file=${this.network.pidFile()}`
+            `--pid-file=${this.network.pidFile()}`,
+            `--interface=${this.network.interfaceName()}`
         ];
 
         if (certPin) argv.push(`--servercert=${certPin}`);
