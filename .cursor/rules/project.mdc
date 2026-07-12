@@ -1,0 +1,43 @@
+---
+description: Cisco VPN GNOME extension — project context and deploy workflow
+alwaysApply: true
+---
+
+# gnome-cisco-vpn
+
+GNOME Shell extension (UUID `cisco-vpn@charisma.ir`) for Cisco AnyConnect via `openconnect` + TOTP. Ubuntu 24.04+, Shell 45/46.
+
+## Deploy before testing
+
+Changes in repo are NOT live until copied:
+
+```bash
+rsync -av --exclude='.git' . ~/.local/share/gnome-shell/extensions/cisco-vpn@charisma.ir/
+# Alt+F2 → r
+```
+
+## Key files
+
+- `extension.js` — panel UI, 2s status monitor
+- `vpnManager.js` — connect/disconnect orchestration
+- `network.js` — PID + `cscovpn0` tunnel/IP only
+- `notifier.js` — use `Main.notify(title, body)` only
+- `bootstrap.js` — DI container
+
+## Architecture rules
+
+- VPN interface is fixed: `cscovpn0` (`constants.js` → `Paths.INTERFACE_NAME`)
+- `network.connected()` = own openconnect PID exists AND `cscovpn0` up
+- `getVpnIp()` reads only `cscovpn0`, never generic `tun*`
+- Show IP in UI only when `state.isConnected()`
+- No NetworkManager/nmcli — shell commands only
+
+## Known pitfalls
+
+- Do NOT rewrite `notifier.js` with MessageTray — broke all notifications
+- GNOME 46 queues rapid `Main.notify` banners; use delayed `connected()` + cancel on disconnect
+- Late `connect()` completion must be guarded with `_connectAttempt`
+- `extension2.js` / `extension3.js` are legacy — edit `extension.js` only
+- Only commit when user explicitly asks
+
+See `GUIDE.md` for full Persian dev guide.

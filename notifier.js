@@ -1,10 +1,16 @@
-// notifier.js
-
+import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 export default class Notifier {
     constructor(title = 'Cisco VPN') {
         this._title = title;
+        this._connectedTimeout = 0;
+    }
+
+    _cancelConnected() {
+        if (!this._connectedTimeout) return;
+        GLib.source_remove(this._connectedTimeout);
+        this._connectedTimeout = 0;
     }
 
     notify(message) {
@@ -12,7 +18,14 @@ export default class Notifier {
     }
 
     connected() {
-        this.notify('VPN connected');
+        // GNOME Shell 46 queues rapid banners; delay avoids stale "connected"
+        // appearing only after a later notification flushes the queue.
+        this._cancelConnected();
+        this._connectedTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
+            this._connectedTimeout = 0;
+            this.notify('VPN connected');
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     connecting() {
@@ -20,10 +33,12 @@ export default class Notifier {
     }
 
     disconnected() {
+        this._cancelConnected();
         this.notify('VPN disconnected');
     }
 
     connectionLost() {
+        this._cancelConnected();
         this.notify('VPN connection lost');
     }
 
@@ -44,6 +59,7 @@ export default class Notifier {
     }
 
     error(message) {
+        this._cancelConnected();
         this.notify(message);
     }
 

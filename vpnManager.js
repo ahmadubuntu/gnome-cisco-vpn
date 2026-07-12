@@ -16,11 +16,15 @@ export default class VPNManager {
         this.otpManager = container.get("otp");
         this.certificateManager = container.get("certificate");
         this.runner = container.get("runner");
+        this._connectAttempt = 0;
+        this._intentionalDisconnect = false;
     }
 
     async connect() {
         if (this.state.isConnected() || this.state.isConnecting()) return;
 
+        const attempt = ++this._connectAttempt;
+        this._intentionalDisconnect = false;
         this.state.connecting();
         this.notifier.connecting();
 
@@ -49,29 +53,77 @@ export default class VPNManager {
 
             this.logger.info(`Connecting to ${gateway}`);
 
-            const result = await this.runner.sudo(cmd, credentials + '\n');
+            await this.runner.spawnDetached(cmd, credentials + '\n');
+            await this._waitForConnection();
 
-            if (!result.success) throw new Error(result.stderr || "Failed");
+            if (attempt !== this._connectAttempt) return;
 
-            await new Promise(r => GLib.timeout_add(GLib.PRIORITY_DEFAULT, 2000, r));
-
-            const ip = await this.network.getVpnIp();
-            this.session.start(gateway, ip, this.network.interfaceName());
-            this.state.connected();
-            this.notifier.connected();
-
-            this._startMonitor();
-            this.logger.info("VPN Connected");
+            await this._finalizeConnection();
 
         } catch (e) {
+            if (attempt !== this._connectAttempt) return;
+
             this.logger.error(e);
-            this.session.stop();
+            await this._cleanupFailedConnect();
             this.state.disconnected();
             this.notifier.error(e.message);
         }
     }
 
+    async acknowledgeConnection() {
+        return this._finalizeConnection();
+    }
+
+    shouldReportConnectionLoss() {
+        return !this._intentionalDisconnect;
+    }
+
+    async _finalizeConnection() {
+        if (!this.network.connected() || this.state.isConnected()) return;
+
+        const gateway = this.settings.gateway();
+        const ip = await this.network.getVpnIp();
+
+        if (!this.network.connected() || this.state.isConnected()) return;
+
+        this.session.start(gateway, ip, this.network.interfaceName());
+        this.state.connected();
+        this.notifier.connected();
+        this._startMonitor();
+        this.logger.info("VPN Connected");
+    }
+
+    _waitForConnection(timeoutSec = 90) {
+        return new Promise((resolve, reject) => {
+            const started = GLib.get_monotonic_time();
+            const timeoutUs = timeoutSec * 1000000;
+
+            const check = () => {
+                if (this.network.connected()) {
+                    resolve();
+                    return GLib.SOURCE_REMOVE;
+                }
+                if (GLib.get_monotonic_time() - started > timeoutUs) {
+                    reject(new Error('Connection timed out'));
+                    return GLib.SOURCE_REMOVE;
+                }
+                return GLib.SOURCE_CONTINUE;
+            };
+
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, check);
+        });
+    }
+
+    async _cleanupFailedConnect() {
+        if (this.network.processExists())
+            await this.runner.sudo(["killall", "-9", "openconnect"]);
+        await this.network.removePidFile();
+        this.session.stop();
+    }
+
     async disconnect() {
+        this._connectAttempt++;
+        this._intentionalDisconnect = true;
         this.logger.info("Disconnect requested");
 
         try {
@@ -134,7 +186,9 @@ export default class VPNManager {
     }
 
     _stopMonitor() {
-        if (this._monitorId) GLib.source_remove(this._monitorId);
+        if (!this._monitorId) return;
+        GLib.source_remove(this._monitorId);
+        this._monitorId = null;
     }
 
     _checkStatus() {
@@ -142,7 +196,8 @@ export default class VPNManager {
         if (!this.network.connected()) {
             this.state.disconnected();
             this.session.stop();
-            this.notifier.connectionLost();
+            if (this.shouldReportConnectionLoss())
+                this.notifier.connectionLost();
         }
     }
 }

@@ -35,6 +35,25 @@ export default class CommandRunner {
         return this.run(["sudo", "-n", ...argv], stdin);
     }
 
+    spawnDetached(argv, stdin = null) {
+        return new Promise((resolve, reject) => {
+            try {
+                let flags = Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE;
+                if (stdin !== null)
+                    flags |= Gio.SubprocessFlags.STDIN_PIPE;
+
+                const proc = Gio.Subprocess.new(["sudo", "-n", ...argv], flags);
+
+                if (stdin !== null)
+                    proc.communicate_utf8_async(stdin, null, () => {});
+
+                resolve({ success: true, process: proc });
+            } catch (e) {
+                reject(e);
+            }
+        });
+    }
+
     async exists(command) {
         const result = await this.run(["which", command]);
         return result.success && result.stdout.length > 0;

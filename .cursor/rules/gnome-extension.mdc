@@ -1,0 +1,38 @@
+---
+description: GNOME extension JS conventions for this project
+globs: "**/*.{js,xml}"
+alwaysApply: false
+---
+
+# GNOME Extension JS
+
+## Imports
+
+Use ESM (`import`) — no `imports.*`. Shell resources:
+
+```js
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+```
+
+## Notifications
+
+```js
+// ✅ Works
+Main.notify('Cisco VPN', 'VPN connected');
+
+// ❌ Broke notifications in production
+new MessageTray.Source(...)
+```
+
+## Subprocess
+
+Use `commandRunner.js` (`runner.sudo`, `runner.run`). openconnect flags in `vpnManager._buildCommand()`.
+
+## State sync
+
+Two layers: `stateMachine` (UI state) and `network.connected()` (reality). Extension monitor in `_updateStatus()` reconciles every 2s.
+
+## Scope discipline
+
+Match existing style: minimal diff, no over-abstraction, reuse managers from `bootstrap.js`.
