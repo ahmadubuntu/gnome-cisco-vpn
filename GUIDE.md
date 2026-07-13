@@ -6,7 +6,7 @@
 
 - **UUID:** `cisco-vpn@charisma.ir`
 - **ورودی اصلی:** `extension.js`
-- **GNOME Shell:** 45, 46 (Ubuntu 24.04+)
+- **GNOME Shell:** 45–50 (Ubuntu 24.04–26.04)
 - **رابط VPN اختصاصی:** `cscovpn0` (ثابت در `constants.js`)
 
 ## مسیر نصب (مهم!)
@@ -54,6 +54,38 @@ network.connected() = processExists() && hasTunnel()
 // processExists: PID در /tmp/openconnect-cisco.pid + ps
 // hasTunnel: فقط رابط cscovpn0
 ```
+
+## Routing & DNS (Settings → Routing & DNS)
+
+- **Leave VPN Domains empty** — openconnect + vpnc-script apply routes/DNS from Cisco server (default, recommended).
+- **Custom DNS** — optional override on `cscovpn0`.
+- **VPN Domains** — optional extra `resolvectl domain` scoping; only applied when VPN DNS is detected or Custom DNS is set.
+
+Extension does NOT remove default routes or add manual host routes anymore.
+
+## Diagnostics (when sites don't load)
+
+```bash
+# 1. VPN interface + DNS
+ip addr show dev cscovpn0
+resolvectl status cscovpn0
+
+# 2. DNS must show link: cscovpn0 (not your Wi-Fi/USB ethernet)
+resolvectl query desk.charisma.digital --cache=no
+resolvectl query kasra.charisma.ir --cache=no
+
+# 3. Route must go via cscovpn0
+ip route get $(getent ahostsv4 desk.charisma.digital | awk '{print $1; exit}')
+
+# 4. Connectivity
+curl -sv --connect-timeout 5 https://desk.charisma.digital/
+ping -c 2 desk.charisma.digital
+
+# 5. Extension logs
+journalctl -f -o cat /usr/bin/gnome-shell | grep -i ciscovpn
+```
+
+If DNS shows `link: enx...` instead of `cscovpn0`, set **Custom DNS** in settings to VPN DNS servers.
 
 ## باگ‌های شناخته‌شده
 

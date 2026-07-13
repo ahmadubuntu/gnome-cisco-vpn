@@ -5,7 +5,7 @@ alwaysApply: true
 
 # gnome-cisco-vpn
 
-GNOME Shell extension (UUID `cisco-vpn@charisma.ir`) for Cisco AnyConnect via `openconnect` + TOTP. Ubuntu 24.04+, Shell 45/46.
+GNOME Shell extension (UUID `cisco-vpn@charisma.ir`) for Cisco AnyConnect via `openconnect` + TOTP. Ubuntu 24.04–26.04, Shell 45–50.
 
 ## Deploy before testing
 

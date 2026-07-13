@@ -150,14 +150,22 @@ fi
 print_step "Configuring passwordless sudo access"
 OPENCONNECT_PATH="$(command -v openconnect 2>/dev/null || true)"
 KILLALL_PATH="$(command -v killall 2>/dev/null || true)"
+IP_PATH="$(command -v ip 2>/dev/null || true)"
+RESOLVECTL_PATH="$(command -v resolvectl 2>/dev/null || true)"
 if [[ -z "$OPENCONNECT_PATH" ]]; then
     OPENCONNECT_PATH="/usr/sbin/openconnect"
 fi
 if [[ -z "$KILLALL_PATH" ]]; then
     KILLALL_PATH="/usr/bin/killall"
 fi
+if [[ -z "$IP_PATH" ]]; then
+    IP_PATH="/usr/sbin/ip"
+fi
+if [[ -z "$RESOLVECTL_PATH" ]]; then
+    RESOLVECTL_PATH="/usr/bin/resolvectl"
+fi
 SUDOERS_FILE="/etc/sudoers.d/cisco-vpn"
-SUDOERS_CONTENT="$CURRENT_USER ALL=(ALL) NOPASSWD: $OPENCONNECT_PATH, $KILLALL_PATH"
+SUDOERS_CONTENT="$CURRENT_USER ALL=(ALL) NOPASSWD: $OPENCONNECT_PATH, $KILLALL_PATH, $IP_PATH, $RESOLVECTL_PATH"
 
 if [[ "$DRY_RUN" == true ]]; then
     print_info "[dry-run] would write sudoers entry to $SUDOERS_FILE"

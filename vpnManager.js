@@ -1,5 +1,6 @@
 // cisco-vpn@charisma.ir/vpnManager.js
 import GLib from 'gi://GLib';
+import Gio from 'gi://Gio';
 
 export default class VPNManager {
     constructor(container) {
@@ -16,6 +17,7 @@ export default class VPNManager {
         this.otpManager = container.get("otp");
         this.certificateManager = container.get("certificate");
         this.runner = container.get("runner");
+        this.routes = container.get("routes");
         this._connectAttempt = 0;
         this._intentionalDisconnect = false;
     }
@@ -89,6 +91,7 @@ export default class VPNManager {
         this.session.start(gateway, ip, this.network.interfaceName());
         this.state.connected();
         this.notifier.connected();
+        await this.routes.apply();
         this._startMonitor();
         this.logger.info("VPN Connected");
     }
@@ -118,6 +121,7 @@ export default class VPNManager {
         if (this.network.processExists())
             await this.runner.sudo(["killall", "-9", "openconnect"]);
         await this.network.removePidFile();
+        await this.routes.cleanup();
         this.session.stop();
     }
 
@@ -134,6 +138,7 @@ export default class VPNManager {
             }
 
             await this.network.removePidFile();
+            await this.routes.cleanup();
 
             this._stopMonitor();
             this.session.stop();
@@ -160,9 +165,27 @@ export default class VPNManager {
             `--interface=${this.network.interfaceName()}`
         ];
 
+        const script = this._vpncScript();
+        if (script) argv.push(`--script=${script}`);
+
         if (certPin) argv.push(`--servercert=${certPin}`);
+
         argv.push(gateway);
         return argv;
+    }
+
+    _vpncScript() {
+        const candidates = [
+            '/usr/share/vpnc-scripts/vpnc-script',
+            '/etc/vpnc/vpnc-script',
+        ];
+        for (const path of candidates) {
+            try {
+                const r = Gio.File.new_for_path(path);
+                if (r.query_exists(null)) return path;
+            } catch (e) {}
+        }
+        return null;
     }
 
     _validateSettings() {
@@ -193,11 +216,16 @@ export default class VPNManager {
 
     _checkStatus() {
         if (!this.state.isConnected()) return;
-        if (!this.network.connected()) {
-            this.state.disconnected();
-            this.session.stop();
-            if (this.shouldReportConnectionLoss())
-                this.notifier.connectionLost();
-        }
+        if (!this.network.connected())
+            this.reportConnectionLost();
+    }
+
+    async reportConnectionLost() {
+        await this.routes.cleanup();
+        this._stopMonitor();
+        this.session.stop();
+        this.state.disconnected();
+        if (this.shouldReportConnectionLoss())
+            this.notifier.connectionLost();
     }
 }

@@ -16,25 +16,27 @@ const VPN_SCHEMA = new Secret.Schema('org.gnome.shell.extensions.cisco-vpn',
 
 export default class CiscoVPNPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
-        const page = new Adw.PreferencesPage();
-        const group = new Adw.PreferencesGroup({ title: 'Cisco VPN Settings' });
-
         this._settings = this.getSettings();
         this._secretEntries = [];
 
-        // Dependencies
-        this._addDependenciesSection(group);
+        window.add(this._buildConnectionPage());
+        window.add(this._buildRoutingPage());
+    }
 
-        // Main Settings
+    _buildConnectionPage() {
+        const page = new Adw.PreferencesPage({
+            title: 'Connection',
+            icon_name: 'network-vpn-symbolic',
+        });
+        const group = new Adw.PreferencesGroup({ title: 'Cisco VPN Settings' });
+
+        this._addDependenciesSection(group);
         this._addEntryRow(group, 'Gateway', 'gateway', 'safehome.charisma.ir:37891');
         this._addEntryRow(group, 'Username', 'username', '');
-
         this._addSecretRow(group, 'Password', 'password');
         this._addSecretRow(group, 'OTP Secret (Base32)', 'otp-secret');
-
         this._addCertPinRow(group);
 
-        // Save Button
         const saveRow = new Adw.ActionRow({ title: 'Save Settings' });
         const saveBtn = new Gtk.Button({
             label: '💾 Save All',
@@ -51,13 +53,37 @@ export default class CiscoVPNPreferences extends ExtensionPreferences {
         group.add(this._statusRow);
 
         page.add(group);
-        window.add(page);
+        return page;
+    }
+
+    _buildRoutingPage() {
+        const page = new Adw.PreferencesPage({
+            title: 'Routing & DNS',
+            icon_name: 'network-workgroup-symbolic',
+        });
+
+        const dnsGroup = new Adw.PreferencesGroup({
+            title: 'DNS',
+            description: 'Optional manual DNS for the VPN interface (systemd-resolved). Separate with comma or newline.',
+        });
+        this._addEntryRow(dnsGroup, 'Custom DNS Servers', 'custom-dns', '10.0.0.1, 10.0.0.2');
+        page.add(dnsGroup);
+
+        const routeGroup = new Adw.PreferencesGroup({
+            title: 'Split Tunnel (optional)',
+            description: 'Leave empty to use Cisco server defaults (recommended). Only set domains here if you need extra DNS scoping beyond what the server provides. Requires Custom DNS if VPN DNS is not auto-detected.',
+        });
+        this._addMultilineRow(routeGroup, 'VPN Domains', 'split-domains',
+            '*.charisma.ir\n*.charisma.tech');
+        page.add(routeGroup);
+
+        return page;
     }
 
     _addDependenciesSection(group) {
         const row = new Adw.ActionRow({
             title: 'Required Packages',
-            subtitle: 'openconnect, oathtool, gir1.2-secret-1, openssl'
+            subtitle: 'openconnect, oathtool, gir1.2-secret-1, openssl, resolvectl'
         });
         group.add(row);
     }
@@ -68,6 +94,42 @@ export default class CiscoVPNPreferences extends ExtensionPreferences {
         row.connect('changed', () => {
             this._settings.set_string(key, row.get_text());
         });
+        group.add(row);
+    }
+
+    _addMultilineRow(group, title, key, placeholder) {
+        const row = new Adw.ActionRow({
+            title,
+            subtitle: 'Comma or newline separated',
+        });
+
+        const buffer = Gtk.TextBuffer.new(null);
+        const current = this._settings.get_string(key) || '';
+        buffer.set_text(current, -1);
+
+        const view = new Gtk.TextView({
+            buffer,
+            monospace: true,
+            wrap_mode: Gtk.WrapMode.WORD_CHAR,
+            left_margin: 6,
+            right_margin: 6,
+            top_margin: 6,
+            bottom_margin: 6,
+        });
+        view.set_size_request(320, 120);
+
+        const scrolled = new Gtk.ScrolledWindow({
+            hscrollbar_policy: Gtk.PolicyType.NEVER,
+            vscrollbar_policy: Gtk.PolicyType.AUTOMATIC,
+            child: view,
+        });
+
+        buffer.connect('changed', () => {
+            const [start, end] = buffer.get_bounds();
+            this._settings.set_string(key, buffer.get_text(start, end, false));
+        });
+
+        row.add_suffix(scrolled);
         group.add(row);
     }
 
@@ -161,7 +223,6 @@ export default class CiscoVPNPreferences extends ExtensionPreferences {
             }
         }
 
-        // Save cert pin
         if (this._certEntry) {
             this._settings.set_string('cert-pin', this._certEntry.get_text());
         }

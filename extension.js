@@ -104,10 +104,8 @@ const CiscoVPNIndicator = GObject.registerClass(
             }
             else if (!actuallyConnected && stateSaysConnected) {
                 this._vpn.logger?.info("Connection lost from outside");
-                this._vpn.state.disconnected();
-                this._vpn.session.stop();
-                if (this._vpn.shouldReportConnectionLoss())
-                    this._vpn.notifier.connectionLost();
+                this._vpn.reportConnectionLost().then(() => this._updateUI());
+                return GLib.SOURCE_CONTINUE;
             }
 
             this._updateUI();

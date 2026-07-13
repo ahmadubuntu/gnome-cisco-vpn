@@ -4,5 +4,7 @@
     <key name="gateway" type="s"><default>'safehome.charisma.ir:37891'</default><summary>Gateway</summary></key>
     <key name="username" type="s"><default>''</default><summary>Username</summary></key>
     <key name="cert-pin" type="s"><default>''</default><summary>Cert Pin</summary></key>
+    <key name="custom-dns" type="s"><default>''</default><summary>Custom DNS servers (comma or newline separated)</summary></key>
+    <key name="split-domains" type="s"><default>''</default><summary>Domains routed through VPN tunnel (one per line)</summary></key>
   </schema>
 </schemalist>

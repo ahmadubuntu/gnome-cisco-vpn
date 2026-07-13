@@ -17,6 +17,7 @@ import StateMachine from "./stateMachine.js";
 import EventBus from "./events.js";
 import PIDWatcher from "./pidWatcher.js";
 import ReconnectManager from "./reconnectManager.js";
+import RouteManager from "./routeManager.js";
 
 export function createVPN(settings) {
     const c = new Container();
@@ -37,6 +38,7 @@ export function createVPN(settings) {
     c.register("pid", new PIDManager());
     c.register("process", new ProcessController(runner));
     c.register("network", new Network(runner));
+    c.register("routes", new RouteManager(runner, c.get("network"), c.get("settings"), logger));
     c.register("session", new VPNSession());
     c.register("state", new StateMachine());
     c.register("notifier", new Notifier());
