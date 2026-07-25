@@ -57,11 +57,12 @@ network.connected() = processExists() && hasTunnel()
 
 ## Routing & DNS (Settings → Routing & DNS)
 
+- **Route Metric** (default `60`) — after connect, all routes on `cscovpn0` are retagged with this metric. Lower metric wins for overlapping destinations (other VPN clients often use `50`).
 - **Leave VPN Domains empty** — openconnect + vpnc-script apply routes/DNS from Cisco server (default, recommended).
 - **Custom DNS** — optional override on `cscovpn0`.
 - **VPN Domains** — optional extra `resolvectl domain` scoping; only applied when VPN DNS is detected or Custom DNS is set.
 
-Extension does NOT remove default routes or add manual host routes anymore.
+Extension does NOT remove default routes or invent destinations; it only sets metric on routes already installed for `cscovpn0`.
 
 ## Diagnostics (when sites don't load)
 

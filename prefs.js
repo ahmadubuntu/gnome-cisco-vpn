@@ -62,6 +62,13 @@ export default class CiscoVPNPreferences extends ExtensionPreferences {
             icon_name: 'network-workgroup-symbolic',
         });
 
+        const metricGroup = new Adw.PreferencesGroup({
+            title: 'Route Priority',
+            description: 'Lower metric wins when multiple VPNs advertise the same destination. Other clients often use 50; this extension defaults to 60.',
+        });
+        this._addMetricRow(metricGroup);
+        page.add(metricGroup);
+
         const dnsGroup = new Adw.PreferencesGroup({
             title: 'DNS',
             description: 'Optional manual DNS for the VPN interface (systemd-resolved). Separate with comma or newline.',
@@ -78,6 +85,30 @@ export default class CiscoVPNPreferences extends ExtensionPreferences {
         page.add(routeGroup);
 
         return page;
+    }
+
+    _addMetricRow(group) {
+        const adjustment = new Gtk.Adjustment({
+            lower: 1,
+            upper: 9999,
+            step_increment: 1,
+            page_increment: 10,
+            value: this._settings.get_uint('route-metric') || 60,
+        });
+
+        const row = new Adw.SpinRow({
+            title: 'Route Metric',
+            subtitle: 'e.g. 50 = prefer this tunnel; 60 = prefer other VPN with metric 50',
+            adjustment,
+        });
+
+        this._settings.bind(
+            'route-metric',
+            row,
+            'value',
+            Gio.SettingsBindFlags.DEFAULT
+        );
+        group.add(row);
     }
 
     _addDependenciesSection(group) {

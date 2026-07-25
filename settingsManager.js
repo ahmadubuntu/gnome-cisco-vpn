@@ -35,6 +35,15 @@ export default class SettingsManager {
         return this.splitDomains().length > 0;
     }
 
+    routeMetric() {
+        try {
+            const value = this.settings.get_uint("route-metric");
+            return Number.isFinite(value) && value > 0 ? value : 60;
+        } catch (e) {
+            return 60;
+        }
+    }
+
     _normalizeDomain(domain) {
         let d = domain.trim().toLowerCase();
         if (d.startsWith('*.'))

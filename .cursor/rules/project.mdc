@@ -30,6 +30,7 @@ rsync -av --exclude='.git' . ~/.local/share/gnome-shell/extensions/cisco-vpn@cha
 - `network.connected()` = own openconnect PID exists AND `cscovpn0` up
 - `getVpnIp()` reads only `cscovpn0`, never generic `tun*`
 - Show IP in UI only when `state.isConnected()`
+- After connect, `routeManager` retags `cscovpn0` routes with configurable metric (default 60)
 - No NetworkManager/nmcli — shell commands only
 
 ## Known pitfalls
