@@ -44,6 +44,37 @@ export default class SettingsManager {
         }
     }
 
+    excludeDomains() {
+        return this._parseList(this.settings.get_string("exclude-domains"))
+            .map(d => this._normalizeDomain(d))
+            .filter(Boolean);
+    }
+
+    excludeViaInterface() {
+        return (this.settings.get_string("exclude-via-interface") || '').trim();
+    }
+
+    excludeRouteMetric() {
+        // Must beat cscovpn0 metric for overlapping destinations.
+        return Math.max(1, this.routeMetric() - 10);
+    }
+
+    forceDomains() {
+        return this._parseList(this.settings.get_string("force-domains"))
+            .map(d => this._normalizeDomain(d))
+            .filter(Boolean);
+    }
+
+    forceRouteMetric() {
+        // Must beat typical other-VPN metrics (often 50).
+        try {
+            const value = this.settings.get_uint("force-route-metric");
+            if (Number.isFinite(value) && value > 0)
+                return value;
+        } catch (e) {}
+        return Math.min(40, Math.max(1, this.routeMetric() - 20));
+    }
+
     _normalizeDomain(domain) {
         let d = domain.trim().toLowerCase();
         if (d.startsWith('*.'))

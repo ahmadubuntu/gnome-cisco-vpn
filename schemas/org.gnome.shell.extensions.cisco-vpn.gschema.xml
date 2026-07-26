@@ -7,5 +7,9 @@
     <key name="custom-dns" type="s"><default>''</default><summary>Custom DNS servers (comma or newline separated)</summary></key>
     <key name="split-domains" type="s"><default>''</default><summary>Domains routed through VPN tunnel (one per line)</summary></key>
     <key name="route-metric" type="u"><default>60</default><summary>Metric for routes on the Cisco VPN interface (lower = higher priority)</summary></key>
+    <key name="exclude-domains" type="s"><default>''</default><summary>Domains that must NOT use the Cisco VPN tunnel</summary></key>
+    <key name="exclude-via-interface" type="s"><default>''</default><summary>Interface for excluded domains (e.g. vpn0); empty = system default route</summary></key>
+    <key name="force-domains" type="s"><default>''</default><summary>Domains that must use the Cisco VPN tunnel even if another VPN also routes them</summary></key>
+    <key name="force-route-metric" type="u"><default>40</default><summary>Metric for force-domain host routes on cscovpn0 (lower than other VPNs)</summary></key>
   </schema>
 </schemalist>

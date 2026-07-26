@@ -84,6 +84,23 @@ export default class CiscoVPNPreferences extends ExtensionPreferences {
             '*.charisma.ir\n*.charisma.tech');
         page.add(routeGroup);
 
+        const excludeGroup = new Adw.PreferencesGroup({
+            title: 'Exclude Domains',
+            description: 'Bypass cscovpn0 and send these domains via another interface. Only works if that interface can actually reach the host.',
+        });
+        this._addMultilineRow(excludeGroup, 'Excluded Domains', 'exclude-domains',
+            'example.other.tld');
+        this._addEntryRow(excludeGroup, 'Exclude Via Interface', 'exclude-via-interface', 'vpn0');
+        page.add(excludeGroup);
+
+        const forceGroup = new Adw.PreferencesGroup({
+            title: 'Force Domains (via Cisco)',
+            description: 'Force these domains through cscovpn0 with a low metric so they win over other VPNs. Use this when another VPN steals a host that only works on Cisco (e.g. mail.charisma.ir → 79.127.30.3).',
+        });
+        this._addMultilineRow(forceGroup, 'Force Domains', 'force-domains',
+            'mail.charisma.ir');
+        page.add(forceGroup);
+
         return page;
     }
 
