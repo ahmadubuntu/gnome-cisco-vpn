@@ -55,14 +55,20 @@ network.connected() = processExists() && hasTunnel()
 // hasTunnel: فقط رابط cscovpn0
 ```
 
+## Behavior (Settings → Behavior)
+
+- **Auto-reconnect** (default on) — after a successful Connect, unexpected loss schedules reconnect with backoff; manual Disconnect cancels it.
+- **Auto-connect on startup** (default off) — one delayed connect (~8s) when the extension enables.
+
+## OpenConnect (Settings → OpenConnect)
+
+Editable **Extra Arguments** (soft flags). Runtime flags always injected by code: `--passwd-on-stdin`, `--background`, `--pid-file`, `--interface`, `--script`.
+
 ## Routing & DNS (Settings → Routing & DNS)
 
-- **Route Metric** (default `60`) — after connect, all routes on `cscovpn0` are retagged with this metric. Lower metric wins for overlapping destinations (other VPN clients often use `50`). A second pass runs ~3s later to catch late vpnc-script routes.
-- **Force Domains** — host routes (`/32`) on `cscovpn0` with metric `40` (default) so Cisco wins over other VPNs that also advertise the same IP (e.g. `mail.charisma.ir`).
-- **Exclude Domains** — host routes via another interface (`exclude-via-interface`, e.g. `vpn0`) or the system default gateway. Only useful if that path can actually reach the host.
-- **Leave VPN Domains empty** — openconnect + vpnc-script apply routes/DNS from Cisco server (default, recommended).
-- **Custom DNS** — optional override on `cscovpn0`.
-- **VPN Domains** — optional extra `resolvectl domain` scoping; only applied when VPN DNS is detected or Custom DNS is set.
+- **Route Metric** (default `60`) — retag `cscovpn0` server routes after connect (second pass ~3s later).
+- **Domain → Interface** — `domain = iface` map (migrates old exclude/force settings once). `cscovpn0` forces via Cisco; other ifaces bypass Cisco.
+- **VPN Domains / Custom DNS** — optional resolvectl scoping / DNS override.
 
 ## Diagnostics (when sites don't load)
 

@@ -7,9 +7,14 @@
     <key name="custom-dns" type="s"><default>''</default><summary>Custom DNS servers (comma or newline separated)</summary></key>
     <key name="split-domains" type="s"><default>''</default><summary>Domains routed through VPN tunnel (one per line)</summary></key>
     <key name="route-metric" type="u"><default>60</default><summary>Metric for routes on the Cisco VPN interface (lower = higher priority)</summary></key>
-    <key name="exclude-domains" type="s"><default>''</default><summary>Domains that must NOT use the Cisco VPN tunnel</summary></key>
-    <key name="exclude-via-interface" type="s"><default>''</default><summary>Interface for excluded domains (e.g. vpn0); empty = system default route</summary></key>
-    <key name="force-domains" type="s"><default>''</default><summary>Domains that must use the Cisco VPN tunnel even if another VPN also routes them</summary></key>
-    <key name="force-route-metric" type="u"><default>40</default><summary>Metric for force-domain host routes on cscovpn0 (lower than other VPNs)</summary></key>
+    <key name="exclude-domains" type="s"><default>''</default><summary>Deprecated: use domain-routes</summary></key>
+    <key name="exclude-via-interface" type="s"><default>''</default><summary>Deprecated: use domain-routes</summary></key>
+    <key name="force-domains" type="s"><default>''</default><summary>Deprecated: use domain-routes</summary></key>
+    <key name="force-route-metric" type="u"><default>40</default><summary>Metric for force-domain host routes on cscovpn0</summary></key>
+    <key name="auto-reconnect" type="b"><default>true</default><summary>Reconnect after unexpected connection loss</summary></key>
+    <key name="reconnect-max-failures" type="u"><default>5</default><summary>Max consecutive reconnect attempts</summary></key>
+    <key name="auto-connect" type="b"><default>false</default><summary>Connect automatically when the extension starts</summary></key>
+    <key name="openconnect-extra-args" type="s"><default>"--useragent=AnyConnect\n--protocol=anyconnect\n--disable-ipv6\n--no-dtls\n--no-external-auth"</default><summary>Extra openconnect arguments</summary></key>
+    <key name="domain-routes" type="s"><default>''</default><summary>Per-domain interface map (domain = iface)</summary></key>
   </schema>
 </schemalist>

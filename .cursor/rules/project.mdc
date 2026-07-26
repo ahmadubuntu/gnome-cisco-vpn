@@ -31,6 +31,8 @@ rsync -av --exclude='.git' . ~/.local/share/gnome-shell/extensions/cisco-vpn@cha
 - `getVpnIp()` reads only `cscovpn0`, never generic `tun*`
 - Show IP in UI only when `state.isConnected()`
 - After connect, `routeManager` retags `cscovpn0` routes with configurable metric (default 60)
+- Auto-reconnect wires `ReconnectManager` after unexpected loss; auto-connect is a single delayed startup attempt
+- Soft openconnect flags live in `openconnect-extra-args`; domain→iface map in `domain-routes`
 - No NetworkManager/nmcli — shell commands only
 
 ## Known pitfalls

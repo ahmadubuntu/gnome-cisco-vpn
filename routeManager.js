@@ -21,8 +21,7 @@ export default class RouteManager {
         await this._applyRouteMetrics(iface);
         this._scheduleMetricRetry(iface);
 
-        await this._applyExclusions(iface);
-        await this._applyForceDomains(iface);
+        await this._applyDomainRouteMap(iface);
 
         const domains = this.settings.splitDomains();
         const customDns = this.settings.customDns();
@@ -52,9 +51,71 @@ export default class RouteManager {
         this.logger.info(`Split DNS domains applied on ${iface}: ${domains.join(', ')}`);
     }
 
+    async _applyDomainRouteMap(iface) {
+        const rules = this.settings.domainRoutes();
+        if (!rules.length) return;
+
+        const forceMetric = this.settings.forceRouteMetric();
+        const excludeMetric = this.settings.excludeRouteMetric();
+        let added = 0;
+
+        for (const rule of rules) {
+            const ips = this._resolveDomainIps(rule.domain);
+            if (!ips.length) {
+                this.logger.warn(`Domain route did not resolve: ${rule.domain} → ${rule.iface}`);
+                continue;
+            }
+
+            const isCisco = rule.iface === iface;
+            const target = isCisco
+                ? { dev: iface, gateway: null, metric: forceMetric }
+                : this._resolveNamedInterface(rule.iface, iface, excludeMetric);
+
+            if (!target) {
+                this.logger.warn(`Domain route interface unavailable: ${rule.domain} → ${rule.iface}`);
+                continue;
+            }
+
+            for (const ip of ips) {
+                if (!isCisco)
+                    await this._deleteHostRoutes(iface, ip);
+
+                const ok = await this._installHostRoute({
+                    ip,
+                    dev: target.dev,
+                    gateway: target.gateway,
+                    metric: target.metric,
+                    label: `${rule.domain} → ${target.dev}`,
+                });
+                if (ok) {
+                    this._managedRoutes.push({
+                        ip,
+                        dev: target.dev,
+                        gateway: target.gateway,
+                        metric: target.metric,
+                    });
+                    added++;
+                }
+            }
+        }
+
+        if (added)
+            this.logger.info(`Applied ${added} domain-route host route(s)`);
+    }
+
+    _resolveNamedInterface(name, ciscoIface, metric) {
+        if (!name || name === ciscoIface)
+            return { dev: ciscoIface, gateway: null, metric: this.settings.forceRouteMetric() };
+
+        const link = execSync(['ip', '-o', 'link', 'show', 'dev', name]);
+        if (!link.success)
+            return null;
+
+        return { dev: name, gateway: null, metric };
+    }
+
     _scheduleMetricRetry(iface) {
         this._cancelMetricRetry();
-        // vpnc-script may install more routes after the first pass.
         this._metricRetryId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 3, () => {
             this._metricRetryId = 0;
             if (this.network.connected())
@@ -67,81 +128,6 @@ export default class RouteManager {
         if (!this._metricRetryId) return;
         GLib.source_remove(this._metricRetryId);
         this._metricRetryId = 0;
-    }
-
-    async _applyExclusions(iface) {
-        const domains = this.settings.excludeDomains();
-        if (!domains.length) return;
-
-        const via = this._resolveExcludeTarget(iface);
-        if (!via) {
-            this.logger.warn('Exclude domains set but no alternate interface/gateway found');
-            return;
-        }
-
-        const metric = this.settings.excludeRouteMetric();
-        let added = 0;
-
-        for (const domain of domains) {
-            const ips = this._resolveDomainIps(domain);
-            if (!ips.length) {
-                this.logger.warn(`Exclude domain did not resolve: ${domain}`);
-                continue;
-            }
-
-            for (const ip of ips) {
-                // Remove any host route we (or others) left on cscovpn0 for this IP.
-                await this._deleteHostRoutes(iface, ip);
-
-                const ok = await this._installHostRoute({
-                    ip,
-                    dev: via.dev,
-                    gateway: via.gateway,
-                    metric,
-                    label: `exclude ${domain}`,
-                });
-                if (ok) {
-                    this._managedRoutes.push({ ip, dev: via.dev, gateway: via.gateway, metric });
-                    added++;
-                }
-            }
-        }
-
-        if (added)
-            this.logger.info(`Applied ${added} exclude route(s)`);
-    }
-
-    async _applyForceDomains(iface) {
-        const domains = this.settings.forceDomains();
-        if (!domains.length) return;
-
-        const metric = this.settings.forceRouteMetric();
-        let added = 0;
-
-        for (const domain of domains) {
-            const ips = this._resolveDomainIps(domain);
-            if (!ips.length) {
-                this.logger.warn(`Force domain did not resolve: ${domain}`);
-                continue;
-            }
-
-            for (const ip of ips) {
-                const ok = await this._installHostRoute({
-                    ip,
-                    dev: iface,
-                    gateway: null,
-                    metric,
-                    label: `force ${domain}`,
-                });
-                if (ok) {
-                    this._managedRoutes.push({ ip, dev: iface, gateway: null, metric });
-                    added++;
-                }
-            }
-        }
-
-        if (added)
-            this.logger.info(`Applied ${added} force route(s) on ${iface} with metric ${metric}`);
     }
 
     async _installHostRoute({ ip, dev, gateway, metric, label }) {
@@ -173,37 +159,8 @@ export default class RouteManager {
             await this.runner.sudo(this._buildDeleteArgv(route, dev));
         }
 
-        // Also try plain deletes in case JSON listing missed a variant.
         await this.runner.sudo(['ip', 'route', 'del', `${ip}/32`, 'dev', dev]).catch(() => {});
         await this.runner.sudo(['ip', 'route', 'del', ip, 'dev', dev]).catch(() => {});
-    }
-
-    _resolveExcludeTarget(ciscoIface) {
-        const preferred = this.settings.excludeViaInterface();
-        if (preferred) {
-            if (preferred === ciscoIface) {
-                this.logger.warn('exclude-via-interface cannot be the Cisco VPN interface');
-                return null;
-            }
-            const link = execSync(['ip', '-o', 'link', 'show', 'dev', preferred]);
-            if (!link.success) {
-                this.logger.warn(`Exclude interface not found: ${preferred}`);
-                return null;
-            }
-            return { dev: preferred, gateway: null };
-        }
-
-        const r = execSync(['ip', '-j', 'route', 'show', 'default']);
-        if (!r.success || !r.stdout) return null;
-
-        try {
-            const data = JSON.parse(r.stdout);
-            for (const route of data) {
-                if (!route.dev || route.dev === ciscoIface) continue;
-                return { dev: route.dev, gateway: route.gateway || null };
-            }
-        } catch (e) {}
-        return null;
     }
 
     _resolveDomainIps(domain) {
@@ -293,7 +250,6 @@ export default class RouteManager {
                     this.logger.warn(`Failed to delete route ${route.dst}: ${del.stderr}`);
             }
 
-            // Ensure no metric-less leftover for this destination.
             await this.runner.sudo(['ip', 'route', 'del', template.dst, 'dev', iface]).catch(() => {});
 
             const add = await this.runner.sudo(this._buildAddArgv(template, iface, metric));

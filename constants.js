@@ -38,6 +38,21 @@ export const OpenConnect = Object.freeze({
     USER_AGENT: 'AnyConnect',
     PROTOCOL: 'anyconnect',
     DEFAULT_GATEWAY: 'safehome.charisma.ir:37891',
+    DEFAULT_EXTRA_ARGS: [
+        '--useragent=AnyConnect',
+        '--protocol=anyconnect',
+        '--disable-ipv6',
+        '--no-dtls',
+        '--no-external-auth',
+    ].join('\n'),
+    PROTECTED_FLAGS: Object.freeze([
+        '--passwd-on-stdin',
+        '--background',
+        '--pid-file',
+        '--interface',
+        '--user',
+        '--script',
+    ]),
 });
 
 export const Events = Object.freeze({

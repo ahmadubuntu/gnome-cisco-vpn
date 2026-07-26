@@ -1,6 +1,7 @@
 // cisco-vpn@charisma.ir/vpnManager.js
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
+import { OpenConnect } from './constants.js';
 
 export default class VPNManager {
     constructor(container) {
@@ -20,6 +21,15 @@ export default class VPNManager {
         this.routes = container.get("routes");
         this._connectAttempt = 0;
         this._intentionalDisconnect = false;
+        this._hadSuccessfulSession = false;
+    }
+
+    get reconnect() {
+        try {
+            return this.container.get("reconnect");
+        } catch (e) {
+            return null;
+        }
     }
 
     async connect() {
@@ -69,6 +79,9 @@ export default class VPNManager {
             await this._cleanupFailedConnect();
             this.state.disconnected();
             this.notifier.error(e.message);
+
+            if (this._hadSuccessfulSession && this.settings.autoReconnect() && !this._intentionalDisconnect)
+                this.reconnect?.scheduleReconnect();
         }
     }
 
@@ -90,6 +103,8 @@ export default class VPNManager {
 
         this.session.start(gateway, ip, this.network.interfaceName());
         this.state.connected();
+        this._hadSuccessfulSession = true;
+        this.reconnect?.reset();
         this.notifier.connected();
         await this.routes.apply();
         this._startMonitor();
@@ -128,6 +143,8 @@ export default class VPNManager {
     async disconnect() {
         this._connectAttempt++;
         this._intentionalDisconnect = true;
+        this._hadSuccessfulSession = false;
+        this.reconnect?.reset();
         this.logger.info("Disconnect requested");
 
         try {
@@ -155,15 +172,14 @@ export default class VPNManager {
         const argv = [
             "openconnect",
             `--user=${username}`,
-            "--useragent=AnyConnect",
-            "--protocol=anyconnect",
             "--passwd-on-stdin",
-            "--disable-ipv6",
-            "--no-dtls",
             "--background",
             `--pid-file=${this.network.pidFile()}`,
-            `--interface=${this.network.interfaceName()}`
+            `--interface=${this.network.interfaceName()}`,
         ];
+
+        for (const arg of this._parseExtraArgs(this.settings.openconnectExtraArgs()))
+            argv.push(arg);
 
         const script = this._vpncScript();
         if (script) argv.push(`--script=${script}`);
@@ -172,6 +188,28 @@ export default class VPNManager {
 
         argv.push(gateway);
         return argv;
+    }
+
+    _parseExtraArgs(text) {
+        if (!text) return [];
+
+        const tokens = [];
+        const re = /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|(\S+)/g;
+        let match;
+        while ((match = re.exec(text)) !== null) {
+            const token = match[1] ?? match[2] ?? match[3];
+            if (token)
+                tokens.push(token);
+        }
+
+        return tokens.filter(token => {
+            const flag = token.split('=')[0];
+            if (OpenConnect.PROTECTED_FLAGS.includes(flag)) {
+                this.logger.warn(`Ignoring protected openconnect flag in extras: ${flag}`);
+                return false;
+            }
+            return true;
+        });
     }
 
     _vpncScript() {
@@ -221,11 +259,19 @@ export default class VPNManager {
     }
 
     async reportConnectionLost() {
+        const shouldReconnect = this.shouldReportConnectionLoss()
+            && this.settings.autoReconnect()
+            && this._hadSuccessfulSession;
+
         await this.routes.cleanup();
         this._stopMonitor();
         this.session.stop();
         this.state.disconnected();
+
         if (this.shouldReportConnectionLoss())
             this.notifier.connectionLost();
+
+        if (shouldReconnect)
+            this.reconnect?.scheduleReconnect();
     }
 }

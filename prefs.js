@@ -2,9 +2,9 @@
 import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio';
-import GLib from 'gi://GLib';
 import Secret from 'gi://Secret';
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import { OpenConnect, Paths } from './constants.js';
 
 const VPN_SCHEMA = new Secret.Schema('org.gnome.shell.extensions.cisco-vpn',
     Secret.SchemaFlags.NONE,
@@ -19,8 +19,35 @@ export default class CiscoVPNPreferences extends ExtensionPreferences {
         this._settings = this.getSettings();
         this._secretEntries = [];
 
+        this._migrateDomainRoutesIfNeeded();
+
         window.add(this._buildConnectionPage());
+        window.add(this._buildBehaviorPage());
+        window.add(this._buildOpenConnectPage());
         window.add(this._buildRoutingPage());
+    }
+
+    _migrateDomainRoutesIfNeeded() {
+        const existing = (this._settings.get_string('domain-routes') || '').trim();
+        if (existing)
+            return;
+
+        const lines = [];
+        const via = (this._settings.get_string('exclude-via-interface') || 'vpn0').trim() || 'vpn0';
+        const exclude = this._settings.get_string('exclude-domains') || '';
+        const force = this._settings.get_string('force-domains') || '';
+
+        for (const part of exclude.split(/[\s,;]+/)) {
+            const d = part.trim();
+            if (d) lines.push(`${d.replace(/^\*\./, '')} = ${via}`);
+        }
+        for (const part of force.split(/[\s,;]+/)) {
+            const d = part.trim();
+            if (d) lines.push(`${d.replace(/^\*\./, '')} = ${Paths.INTERFACE_NAME}`);
+        }
+
+        if (lines.length)
+            this._settings.set_string('domain-routes', [...new Set(lines)].join('\n'));
     }
 
     _buildConnectionPage() {
@@ -39,7 +66,7 @@ export default class CiscoVPNPreferences extends ExtensionPreferences {
 
         const saveRow = new Adw.ActionRow({ title: 'Save Settings' });
         const saveBtn = new Gtk.Button({
-            label: '💾 Save All',
+            label: 'Save All',
             halign: Gtk.Align.END
         });
         saveBtn.add_css_class('suggested-action');
@@ -52,6 +79,108 @@ export default class CiscoVPNPreferences extends ExtensionPreferences {
         this._statusRow.add_suffix(this._statusLabel);
         group.add(this._statusRow);
 
+        page.add(group);
+        return page;
+    }
+
+    _buildBehaviorPage() {
+        const page = new Adw.PreferencesPage({
+            title: 'Behavior',
+            icon_name: 'emblem-system-symbolic',
+        });
+
+        const group = new Adw.PreferencesGroup({
+            title: 'Connection Behavior',
+            description: 'Auto-reconnect only runs after a successful Connect and never after a manual Disconnect.',
+        });
+
+        const autoReconnect = new Adw.SwitchRow({
+            title: 'Auto-reconnect',
+            subtitle: 'Reconnect after unexpected connection loss',
+        });
+        this._settings.bind('auto-reconnect', autoReconnect, 'active', Gio.SettingsBindFlags.DEFAULT);
+        group.add(autoReconnect);
+
+        const maxAdj = new Gtk.Adjustment({
+            lower: 1,
+            upper: 20,
+            step_increment: 1,
+            page_increment: 1,
+            value: this._settings.get_uint('reconnect-max-failures') || 5,
+        });
+        const maxFailures = new Adw.SpinRow({
+            title: 'Reconnect max failures',
+            subtitle: 'Stop auto-reconnect after this many consecutive failures',
+            adjustment: maxAdj,
+        });
+        this._settings.bind('reconnect-max-failures', maxFailures, 'value', Gio.SettingsBindFlags.DEFAULT);
+        group.add(maxFailures);
+
+        const autoConnect = new Adw.SwitchRow({
+            title: 'Auto-connect on startup',
+            subtitle: 'Connect once after GNOME Shell starts (waits ~8s for network)',
+        });
+        this._settings.bind('auto-connect', autoConnect, 'active', Gio.SettingsBindFlags.DEFAULT);
+        group.add(autoConnect);
+
+        page.add(group);
+        return page;
+    }
+
+    _buildOpenConnectPage() {
+        const page = new Adw.PreferencesPage({
+            title: 'OpenConnect',
+            icon_name: 'utilities-terminal-symbolic',
+        });
+
+        const group = new Adw.PreferencesGroup({
+            title: 'Extra Arguments',
+            description: 'Soft openconnect flags (one per line). Runtime flags like --passwd-on-stdin, --background, --pid-file, and --interface are always set by the extension.',
+        });
+
+        const buffer = Gtk.TextBuffer.new(null);
+        const current = this._settings.get_string('openconnect-extra-args') || OpenConnect.DEFAULT_EXTRA_ARGS;
+        buffer.set_text(current, -1);
+
+        const view = new Gtk.TextView({
+            buffer,
+            monospace: true,
+            wrap_mode: Gtk.WrapMode.WORD_CHAR,
+            left_margin: 8,
+            right_margin: 8,
+            top_margin: 8,
+            bottom_margin: 8,
+        });
+        view.set_size_request(-1, 160);
+
+        const scrolled = new Gtk.ScrolledWindow({
+            hscrollbar_policy: Gtk.PolicyType.AUTOMATIC,
+            vscrollbar_policy: Gtk.PolicyType.AUTOMATIC,
+            child: view,
+            min_content_height: 160,
+        });
+
+        buffer.connect('changed', () => {
+            const [start, end] = buffer.get_bounds();
+            this._settings.set_string('openconnect-extra-args', buffer.get_text(start, end, false));
+        });
+
+        const box = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 8 });
+        box.append(scrolled);
+
+        const resetBtn = new Gtk.Button({
+            label: 'Reset to defaults',
+            halign: Gtk.Align.START,
+        });
+        resetBtn.connect('clicked', () => {
+            buffer.set_text(OpenConnect.DEFAULT_EXTRA_ARGS, -1);
+            this._settings.set_string('openconnect-extra-args', OpenConnect.DEFAULT_EXTRA_ARGS);
+        });
+        box.append(resetBtn);
+
+        const row = new Adw.PreferencesRow();
+        row.set_child(box);
+        group.add(row);
         page.add(group);
         return page;
     }
@@ -77,29 +206,20 @@ export default class CiscoVPNPreferences extends ExtensionPreferences {
         page.add(dnsGroup);
 
         const routeGroup = new Adw.PreferencesGroup({
-            title: 'Split Tunnel (optional)',
-            description: 'Leave empty to use Cisco server defaults (recommended). Only set domains here if you need extra DNS scoping beyond what the server provides. Requires Custom DNS if VPN DNS is not auto-detected.',
+            title: 'Split Tunnel DNS (optional)',
+            description: 'Leave empty to use Cisco server defaults. Optional resolvectl domain scoping.',
         });
         this._addMultilineRow(routeGroup, 'VPN Domains', 'split-domains',
             '*.charisma.ir\n*.charisma.tech');
         page.add(routeGroup);
 
-        const excludeGroup = new Adw.PreferencesGroup({
-            title: 'Exclude Domains',
-            description: 'Bypass cscovpn0 and send these domains via another interface. Only works if that interface can actually reach the host.',
+        const mapGroup = new Adw.PreferencesGroup({
+            title: 'Domain → Interface',
+            description: `One rule per line: domain = iface. Use ${Paths.INTERFACE_NAME} to force through Cisco, or another interface (e.g. vpn0) to bypass it. Wildcards like *.charisma.ir become charisma.ir. Lines starting with # are comments.`,
         });
-        this._addMultilineRow(excludeGroup, 'Excluded Domains', 'exclude-domains',
-            'example.other.tld');
-        this._addEntryRow(excludeGroup, 'Exclude Via Interface', 'exclude-via-interface', 'vpn0');
-        page.add(excludeGroup);
-
-        const forceGroup = new Adw.PreferencesGroup({
-            title: 'Force Domains (via Cisco)',
-            description: 'Force these domains through cscovpn0 with a low metric so they win over other VPNs. Use this when another VPN steals a host that only works on Cisco (e.g. mail.charisma.ir → 79.127.30.3).',
-        });
-        this._addMultilineRow(forceGroup, 'Force Domains', 'force-domains',
-            'mail.charisma.ir');
-        page.add(forceGroup);
+        this._addMultilineRow(mapGroup, 'Domain Routes', 'domain-routes',
+            `mail.charisma.ir = vpn0\ndesk.charisma.digital = ${Paths.INTERFACE_NAME}`);
+        page.add(mapGroup);
 
         return page;
     }
@@ -237,12 +357,12 @@ export default class CiscoVPNPreferences extends ExtensionPreferences {
                 const pin = 'pin-sha256:' + stdout.trim();
                 this._certEntry.set_text(pin);
                 this._settings.set_string('cert-pin', pin);
-                this._statusLabel.label = '✅ Fetched successfully';
+                this._statusLabel.label = 'Fetched successfully';
             } else {
-                this._statusLabel.label = '❌ Fetch failed';
+                this._statusLabel.label = 'Fetch failed';
             }
         } catch (e) {
-            this._statusLabel.label = '❌ Error: ' + e.message;
+            this._statusLabel.label = 'Error: ' + e.message;
         }
     }
 
@@ -277,6 +397,6 @@ export default class CiscoVPNPreferences extends ExtensionPreferences {
     }
 
     _showSaved() {
-        this._statusLabel.label = '✅ All settings saved successfully!';
+        this._statusLabel.label = 'All settings saved successfully!';
     }
 }

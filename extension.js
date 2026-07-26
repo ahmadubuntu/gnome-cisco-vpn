@@ -18,6 +18,7 @@ const CiscoVPNIndicator = GObject.registerClass(
 
             this._extension = extension;
             this._vpn = createVPN(extension.getSettings());
+            this._autoConnectId = 0;
 
             this._buildUI();
             this._checkInitialState();
@@ -85,6 +86,28 @@ const CiscoVPNIndicator = GObject.registerClass(
 
         _checkInitialState() {
             this._updateUI();
+
+            if (this._vpn.network?.connected()) {
+                this._vpn.acknowledgeConnection().then(() => this._updateUI());
+                return;
+            }
+
+            if (!this._vpn.settings?.autoConnect())
+                return;
+
+            this._autoConnectId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 8, () => {
+                this._autoConnectId = 0;
+                if (this._vpn.state?.isConnected() || this._vpn.state?.isConnecting())
+                    return GLib.SOURCE_REMOVE;
+                if (this._vpn.network?.connected()) {
+                    this._vpn.acknowledgeConnection().then(() => this._updateUI());
+                    return GLib.SOURCE_REMOVE;
+                }
+
+                this._vpn.logger?.info("Auto-connect: starting delayed connect");
+                this._vpn.connect().catch(e => console.error(e));
+                return GLib.SOURCE_REMOVE;
+            });
         }
 
         _startMonitor() {
@@ -112,7 +135,12 @@ const CiscoVPNIndicator = GObject.registerClass(
         }
 
         destroy() {
+            if (this._autoConnectId) {
+                GLib.source_remove(this._autoConnectId);
+                this._autoConnectId = 0;
+            }
             if (this._monitorId) GLib.source_remove(this._monitorId);
+            this._vpn?.reconnect?.cancel();
             super.destroy();
         }
     }
@@ -126,5 +154,6 @@ export default class CiscoVPNExtension extends Extension {
 
     disable() {
         if (this._indicator) this._indicator.destroy();
+        this._indicator = null;
     }
 }
