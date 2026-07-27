@@ -1,0 +1,43 @@
+---
+description: Dual push to GitHub + Azure DevOps DataPlatform
+alwaysApply: true
+---
+
+# Dual remotes (GitHub + Azure)
+
+Every commit that is pushed must land on **both**:
+
+1. GitHub — `origin` fetch/push SSH: `git@github.com:ahmadubuntu/gnome-cisco-vpn.git`
+2. Azure DevOps — `https://azure.charisma.tech/DataPlatform/DataPlatform/_git/gnome-cisco-vpn`
+
+`origin` is configured with two push URLs (GitHub + Azure). Remote `azure` is the same Azure URL for explicit fetch/push.
+
+## Auth
+
+Use **`AZDO_PAT_DATAPLATFORM`** (never `AZDO_PAT`).
+
+```bash
+AUTH_HEADER="AUTHORIZATION: Basic $(printf ':%s' "$AZDO_PAT_DATAPLATFORM" | base64 -w0)"
+```
+
+When pushing, ensure the Azure leg is authenticated:
+
+```bash
+# Preferred: push to both explicitly
+git push origin main
+git -c credential.helper= -c http.extraHeader="$AUTH_HEADER" push azure main
+git -c credential.helper= -c http.extraHeader="$AUTH_HEADER" push azure --tags
+```
+
+Or a single dual-push via `origin` push URLs, with Azure auth:
+
+```bash
+git -c http.extraHeader="$AUTH_HEADER" push origin main
+git -c http.extraHeader="$AUTH_HEADER" push origin --tags
+```
+
+Rules:
+- Never print/commit the PAT; never put it in `git remote set-url`
+- Encode empty username: `:PAT` (colon + token)
+- Keep branch upstream on `origin/<branch>` (GitHub), not `azure/*`
+- Do not commit `schemas/gschemas.compiled`

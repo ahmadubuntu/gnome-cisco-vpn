@@ -42,5 +42,6 @@ rsync -av --exclude='.git' . ~/.local/share/gnome-shell/extensions/cisco-vpn@cha
 - Late `connect()` completion must be guarded with `_connectAttempt`
 - `extension2.js` / `extension3.js` are legacy — edit `extension.js` only
 - Only commit when user explicitly asks
+- Every push goes to **GitHub and Azure** (see `azure-devops.mdc`); use `AZDO_PAT_DATAPLATFORM`
 
 See `GUIDE.md` for full Persian dev guide.
