@@ -5,12 +5,12 @@ alwaysApply: true
 
 # Dual remotes (GitHub + Azure)
 
-Every commit that is pushed must land on **both**:
+Every push must update **both** remotes:
 
-1. GitHub — `origin` fetch/push SSH: `git@github.com:ahmadubuntu/gnome-cisco-vpn.git`
-2. Azure DevOps — `https://azure.charisma.tech/DataPlatform/DataPlatform/_git/gnome-cisco-vpn`
+1. `origin` → GitHub SSH: `git@github.com:ahmadubuntu/gnome-cisco-vpn.git`
+2. `azure` → `https://azure.charisma.tech/DataPlatform/DataPlatform/_git/gnome-cisco-vpn`
 
-`origin` is configured with two push URLs (GitHub + Azure). Remote `azure` is the same Azure URL for explicit fetch/push.
+Do **not** put Azure on `origin` pushurl (Azure needs PAT header; mixed pushurls fail the Azure leg after GitHub succeeds).
 
 ## Auth
 
@@ -18,22 +18,11 @@ Use **`AZDO_PAT_DATAPLATFORM`** (never `AZDO_PAT`).
 
 ```bash
 AUTH_HEADER="AUTHORIZATION: Basic $(printf ':%s' "$AZDO_PAT_DATAPLATFORM" | base64 -w0)"
-```
-
-When pushing, ensure the Azure leg is authenticated:
-
-```bash
-# Preferred: push to both explicitly
-git push origin main
-git -c credential.helper= -c http.extraHeader="$AUTH_HEADER" push azure main
+git push origin HEAD
+git -c credential.helper= -c http.extraHeader="$AUTH_HEADER" push azure HEAD
+# when tags changed:
+git push origin --tags
 git -c credential.helper= -c http.extraHeader="$AUTH_HEADER" push azure --tags
-```
-
-Or a single dual-push via `origin` push URLs, with Azure auth:
-
-```bash
-git -c http.extraHeader="$AUTH_HEADER" push origin main
-git -c http.extraHeader="$AUTH_HEADER" push origin --tags
 ```
 
 Rules:
