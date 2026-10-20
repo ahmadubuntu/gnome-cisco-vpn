@@ -22,6 +22,7 @@ export default class VPNManager {
         this._connectAttempt = 0;
         this._intentionalDisconnect = false;
         this._hadSuccessfulSession = false;
+        this._destroyed = false;
     }
 
     get reconnect() {
@@ -80,7 +81,7 @@ export default class VPNManager {
             this.state.disconnected();
             this.notifier.error(e.message);
 
-            if (this._hadSuccessfulSession && this.settings.autoReconnect() && !this._intentionalDisconnect)
+            if (!this._destroyed && this._hadSuccessfulSession && this.settings.autoReconnect() && !this._intentionalDisconnect)
                 this.reconnect?.scheduleReconnect();
         }
     }
@@ -239,7 +240,7 @@ export default class VPNManager {
     }
 
     _startMonitor() {
-        if (this._monitorId) return;
+        if (this._destroyed || this._monitorId) return;
         this._monitorId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 3, () => {
             this._checkStatus();
             return GLib.SOURCE_CONTINUE;
@@ -252,8 +253,15 @@ export default class VPNManager {
         this._monitorId = null;
     }
 
+    destroy() {
+        this._destroyed = true;
+        this._stopMonitor();
+        this.reconnect?.cancel();
+        this.routes?._cancelMetricRetry?.();
+    }
+
     _checkStatus() {
-        if (!this.state.isConnected()) return;
+        if (this._destroyed || !this.state.isConnected()) return;
         if (!this.network.connected())
             this.reportConnectionLost();
     }
@@ -271,7 +279,7 @@ export default class VPNManager {
         if (this.shouldReportConnectionLoss())
             this.notifier.connectionLost();
 
-        if (shouldReconnect)
+        if (shouldReconnect && !this._destroyed)
             this.reconnect?.scheduleReconnect();
     }
 }

@@ -1,6 +1,7 @@
 // cisco-vpn@charisma.ir/network.js
 import { execSync } from './utils.js';
 import { Paths } from './constants.js';
+import Gio from 'gi://Gio';
 
 export default class Network {
     constructor(runner) {
@@ -20,9 +21,7 @@ export default class Network {
 
     getPid() {
         try {
-            const r = execSync(['cat', this._pidFile]);
-            if (!r.success || !r.stdout) return null;
-            const pid = parseInt(r.stdout.trim());
+            const pid = parseInt(this._readText(this._pidFile).trim());
             return isNaN(pid) ? null : pid;
         } catch (e) {
             return null;
@@ -38,14 +37,22 @@ export default class Network {
     processExists() {
         const pid = this.getPid();
         if (!pid) return false;
-        const r = execSync(['ps', '-p', pid.toString(), '-o', 'comm=']);
-        return r.success && r.stdout.trim() === 'openconnect';
+        try {
+            return this._readText(`/proc/${pid}/comm`).trim() === 'openconnect';
+        } catch (e) {
+            return false;
+        }
     }
 
     hasTunnel() {
         if (!this.processExists()) return false;
-        const r = execSync(['ip', '-o', 'link', 'show', 'dev', this._interfaceName]);
-        return r.success && r.stdout.trim().length > 0;
+        return Gio.File.new_for_path(`/sys/class/net/${this._interfaceName}`).query_exists(null);
+    }
+
+    _readText(path) {
+        const [ok, bytes] = Gio.File.new_for_path(path).load_contents(null);
+        if (!ok) throw new Error('Could not read VPN status file');
+        return new TextDecoder().decode(bytes);
     }
 
     connected() {

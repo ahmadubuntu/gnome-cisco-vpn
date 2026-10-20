@@ -139,8 +139,11 @@ const CiscoVPNIndicator = GObject.registerClass(
                 GLib.source_remove(this._autoConnectId);
                 this._autoConnectId = 0;
             }
-            if (this._monitorId) GLib.source_remove(this._monitorId);
-            this._vpn?.reconnect?.cancel();
+            if (this._monitorId) {
+                GLib.source_remove(this._monitorId);
+                this._monitorId = 0;
+            }
+            this._vpn?.destroy();
             super.destroy();
         }
     }
